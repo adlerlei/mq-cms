@@ -1,1 +1,72 @@
-[]
+[
+  {
+    "id": "8dfd4cba-ed2a-4c36-8243-4fa0379ddd87",
+    "filename": "jpg_e2572013",
+    "type": "image",
+    "url": "/static/uploads/jpg_e2572013",
+    "section_key": "carousel_bottom_left"
+  },
+  {
+    "id": "510e9a1f-e4bd-4930-92eb-618ae5715bba",
+    "filename": "jpg_509d741d",
+    "type": "image",
+    "url": "/static/uploads/jpg_509d741d",
+    "section_key": "carousel_top_right"
+  },
+  {
+    "id": "f0655fbc-fc45-414b-a32b-c3b25b863579",
+    "filename": "jpg_1f672e95",
+    "type": "image",
+    "url": "/static/uploads/jpg_1f672e95",
+    "section_key": "carousel_bottom_right"
+  },
+  {
+    "id": "a7deccc6-5e31-4e4b-ae6b-46f07d03ad94",
+    "filename": "footer_e9564817.mp4",
+    "type": "video",
+    "url": "/static/uploads/footer_e9564817.mp4",
+    "section_key": "footer_content"
+  },
+  {
+    "id": "97ffa1a5-ec8c-449a-a00d-b65b4206d57b",
+    "filename": "jpg_9b852538",
+    "type": "image",
+    "url": "/static/uploads/jpg_9b852538",
+    "section_key": "carousel_top_right"
+  },
+  {
+    "id": "0cf40acf-a652-4509-bd29-aa7a70750fb9",
+    "filename": "BMW_c2de4e66.jpg",
+    "type": "image",
+    "url": "/static/uploads/BMW_c2de4e66.jpg",
+    "section_key": "carousel_bottom_left"
+  },
+  {
+    "id": "f1973cac-16da-49a4-b9ed-cc6ff61c76f9",
+    "filename": "hollywood_52c640a1.jpg",
+    "type": "image",
+    "url": "/static/uploads/hollywood_52c640a1.jpg",
+    "section_key": "carousel_bottom_right"
+  },
+  {
+    "id": "70185ad7-49cf-48ac-b656-ebf1d18888c2",
+    "filename": "mima_4f331c29.jpg",
+    "type": "image",
+    "url": "/static/uploads/mima_4f331c29.jpg",
+    "section_key": "carousel_bottom_right"
+  },
+  {
+    "id": "75d3cb14-ec4c-4889-acfd-54a1638e9c3f",
+    "filename": "MQAD_d6e1928f.mp4",
+    "type": "video",
+    "url": "/static/uploads/MQAD_d6e1928f.mp4",
+    "section_key": "header_video"
+  },
+  {
+    "id": "c819cd01-cdd0-4f34-a0de-336834094770",
+    "filename": "jpg_7c2229ad",
+    "type": "image",
+    "url": "/static/uploads/jpg_7c2229ad",
+    "section_key": "carousel_top_left"
+  }
+]
