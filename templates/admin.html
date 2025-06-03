@@ -65,6 +65,11 @@
         .selected-images-list.drag-over-active { /* 拖曳目標容器高亮 */
             border: 2px dashed #007bff;
         }
+        .table-section-header th {
+            background-color: #f5f5f5; /* 給小標題一個背景色 */
+            font-weight: bold;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -164,16 +169,22 @@
                 </form>
             </div>
 
+            <!-- 媒體庫與區塊內容指派列表 -->
             <div class="box mt-5">
                 <h2 class="title is-4">媒體庫與區塊內容指派</h2>
-                {# 先提取所有素材的 ID 集合，方便後面判斷 #}
-                {% set material_ids_used_in_assignments = [] %}
-                {% for item in media_items %}
-                    {% if item.type == 'section_assignment' and item.content_source_type == 'single_media' %}
-                        {% if material_ids_used_in_assignments.append(item.media_id) %}{% endif %}
-                    {% elif item.type == 'carousel_group' and item.image_ids %}
-                        {% for img_id in item.image_ids %}
-                            {% if material_ids_used_in_assignments.append(img_id) %}{% endif %}
+                {% set assignments = media_items | selectattr('type', 'equalto', 'section_assignment') | list %}
+                {% set materials = media_items | selectattr('type', 'in', ['image', 'video']) | list %}
+                
+                {% set used_material_ids = [] %}
+                {% for assign_item in assignments %}
+                    {% if assign_item.content_source_type == 'single_media' %}
+                        {% if used_material_ids.append(assign_item.media_id) %}{% endif %}
+                    {% endif %}
+                {% endfor %}
+                {% for group_item in media_items %}
+                    {% if group_item.type == 'carousel_group' and group_item.image_ids %}
+                        {% for img_id in group_item.image_ids %}
+                            {% if used_material_ids.append(img_id) %}{% endif %}
                         {% endfor %}
                     {% endif %}
                 {% endfor %}
@@ -190,14 +201,14 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {# 第一遍：顯示所有 section_assignment 記錄 #}
-                            {% for item in media_items %}
-                                {% if item.type == 'section_assignment' %}
+                            {% if assignments %}
+                                <tr class="table-section-header"><th colspan="4">區塊內容指派</th></tr>
+                                {% for item in assignments %}
                                 <tr>
                                     <td>
                                         {% if item.content_source_type == 'single_media' %}
                                             {% set assigned_material = namespace(found=false) %}
-                                            {% for mat_item in media_items %}
+                                            {% for mat_item in materials %} {# 只在素材中查找 #}
                                                 {% if mat_item.id == item.media_id %}
                                                     {% set assigned_material.value = mat_item %}
                                                     {% set assigned_material.found = true %}
@@ -214,10 +225,10 @@
                                                     </span>
                                                 {% endif %}
                                             {% else %}
-                                                <span>(素材遺失)</span>
+                                                <span>(素材遺失: {{ item.media_id | truncate(8) }})</span>
                                             {% endif %}
                                         {% elif item.content_source_type == 'group_reference' %}
-                                            <span>輪播組</span>
+                                            <span>輪播組: {{ (media_items | selectattr('id', 'equalto', item.group_id) | first).name | default('(群組遺失)') }}</span>
                                         {% endif %}
                                     </td>
                                     <td>
@@ -230,31 +241,29 @@
                                     <td>
                                         {{ available_sections.get(item.section_key, item.section_key) }}
                                         {% if item.content_source_type == 'group_reference' %}
-                                            <br><small>群組ID: {{ item.group_id | truncate(8) }}..., 偏移: {{ item.offset }}</small>
+                                            <br><small>偏移: {{ item.offset }}</small>
                                         {% elif item.content_source_type == 'single_media' %}
-                                            <br><small>素材ID: {{ item.media_id | truncate(8) }}...</small>
+                                            {# 不再顯示素材ID，因為預覽已顯示素材 #}
                                         {% endif %}
                                     </td>
                                     <td class="actions-cell has-text-right">
                                         <button class="button is-small is-link is-light" disabled>編輯指派</button>
-                                        <form action="{{ url_for('delete_media_item', item_id_to_delete=item.id) }}" method="POST" onsubmit="return confirm('您確定要刪除這個「指派」記錄嗎？被指派的素材本身不會被刪除。');">
+                                        <form action="{{ url_for('delete_media_item', item_id_to_delete=item.id) }}" method="POST" onsubmit="return confirm('您確定要刪除這個「指派」記錄嗎？被指派的素材或群組本身不會被刪除。');">
                                             <button type="submit" class="button is-small is-danger is-light">刪除指派</button>
                                         </form>
                                     </td>
                                 </tr>
-                                {% endif %}
-                            {% endfor %}
-
-                            {# 分隔線，可選 #}
-                            {% if media_items | selectattr('type', 'in', ['image', 'video']) | list | length > 0 and media_items | selectattr('type', 'equalto', 'section_assignment') | list | length > 0 %}
-                            <tr><td colspan="4"><hr></td></tr>
+                                {% endfor %}
                             {% endif %}
 
-                            {# 第二遍：顯示所有純素材 (type: image/video 且未被任何 assignment 或 group 使用) #}
-                            {# 這裡的邏輯是，如果一個素材沒有出現在 material_ids_used_in_assignments 中，則視為未使用的純素材 #}
-                            {% for item in media_items %}
-                                {% if item.type in ['image', 'video'] %}
-                                    {% if item.id not in material_ids_used_in_assignments %}
+                            {# 顯示未被使用的純素材 #}
+                            {% set unused_materials_exist = false %}
+                            {% for item in materials %}
+                                {% if item.id not in used_material_ids %}
+                                    {% if not unused_materials_exist %}
+                                        <tr class="table-section-header"><th colspan="4">未使用的素材</th></tr>
+                                        {% set unused_materials_exist = true %}
+                                    {% endif %}
                                     <tr>
                                         <td>
                                             {% if item.type == 'image' %}
@@ -277,26 +286,32 @@
                                         </td>
                                         <td class="actions-cell has-text-right">
                                             <button class="button is-small is-link is-light" disabled>編輯素材</button>
-                                            <form action="{{ url_for('delete_media_item', item_id_to_delete=item.id) }}" method="POST" onsubmit="return confirm('您確定要刪除這個「素材」嗎？如果它被任何輪播組使用，您可能需要先從組中移除它。');">
+                                            <form action="{{ url_for('delete_media_item', item_id_to_delete=item.id) }}" method="POST" onsubmit="return confirm('您確定要刪除這個「素材」嗎？它將從素材庫中移除。');">
                                                 <button type="submit" class="button is-small is-danger is-light">刪除素材</button>
                                             </form>
                                         </td>
                                     </tr>
-                                    {% endif %}
                                 {% endif %}
                             {% endfor %}
+                            
+                            {% if not assignments and not unused_materials_exist %}
+                                <tr>
+                                    <td colspan="4" class="has-text-centered">目前沒有任何媒體項目或輪播指派。</td>
+                                </tr>
+                            {% endif %}
                         </tbody>
                     </table>
                 </div>
                 {% else %}
                 <div class="notification is-warning">
-                    <p class="has-text-centered">目前沒有任何媒體項目或輪播指派。</p>
+                    <p class="has-text-centered">目前媒體庫為空。</p>
                 </div>
                 {% endif %}
             </div>
 
+            <!-- 管理輪播圖片組區塊 (保持不變) -->
             <div class="box mt-5 carousel-group-management">
-                <h2 class="title is-4">管理輪播圖片組</h2>
+                 <h2 class="title is-4">管理輪播圖片組</h2>
                 <div class="box">
                     <h3 class="title is-5">建立新的輪播圖片組</h3>
                     <form id="createCarouselGroupForm" action="{{ url_for('create_carousel_group') }}" method="POST">
@@ -358,6 +373,7 @@
         </div>
     </section>
 
+    <!-- Modal for Editing Carousel Group Images (保持不變) -->
     <div id="editCarouselGroupModal" class="modal">
         <div class="modal-background"></div>
         <div class="modal-card">
