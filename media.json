@@ -1,59 +1,145 @@
 [
   {
-    "id": "1a4604f2-64e2-4753-ae96-96901d29d171",
-    "filename": "jpg_a7b6ee67",
+    "id": "37fd1fe6-98ec-4133-bbb1-dfe67bcde088",
+    "filename": "png_c03c6c79",
     "type": "image",
-    "url": "/static/uploads/jpg_a7b6ee67"
+    "url": "/static/uploads/png_c03c6c79"
   },
   {
-    "id": "1ee18604-b96b-49d2-ac7d-909ede722ea0",
-    "filename": "jpg_d0f69405",
-    "type": "image",
-    "url": "/static/uploads/jpg_d0f69405"
+    "id": "88248021-6d2d-4e4a-8761-b5a4bb65de8a",
+    "type": "section_assignment",
+    "section_key": "carousel_top_left",
+    "content_source_type": "single_media",
+    "media_id": "37fd1fe6-98ec-4133-bbb1-dfe67bcde088"
   },
   {
-    "id": "69e17a5d-6b78-4302-9236-d262d2db2ab2",
-    "filename": "jpg_766cfc70",
+    "id": "50e6ea8d-ee1b-4a4c-acf5-e5789080cec8",
+    "filename": "png_67ede7a9",
     "type": "image",
-    "url": "/static/uploads/jpg_766cfc70"
+    "url": "/static/uploads/png_67ede7a9"
   },
   {
-    "id": "6bcf253b-05ad-4f51-97e5-a6f2cd1be3ce",
-    "filename": "hollywood_172e21b1.jpg",
-    "type": "image",
-    "url": "/static/uploads/hollywood_172e21b1.jpg"
+    "id": "8ee2c101-d8e4-40ec-8c9d-e69974a2bdf5",
+    "type": "section_assignment",
+    "section_key": "carousel_top_left",
+    "content_source_type": "single_media",
+    "media_id": "50e6ea8d-ee1b-4a4c-acf5-e5789080cec8"
   },
   {
-    "id": "5d888e26-b1ed-458e-b2a9-03a59e8fee38",
+    "id": "aa8143a1-d7fc-4479-b092-27c2b2365e98",
+    "filename": "png_a1fd63aa",
+    "type": "image",
+    "url": "/static/uploads/png_a1fd63aa"
+  },
+  {
+    "id": "f2b1f2bc-c324-44c4-bb02-c77394821219",
+    "type": "section_assignment",
+    "section_key": "carousel_top_right",
+    "content_source_type": "single_media",
+    "media_id": "aa8143a1-d7fc-4479-b092-27c2b2365e98"
+  },
+  {
+    "id": "4f28d42a-e92f-4ed0-958e-cca0ad4f4f7b",
+    "filename": "png_192059ee",
+    "type": "image",
+    "url": "/static/uploads/png_192059ee"
+  },
+  {
+    "id": "52213752-4c9e-4293-ba65-db555a9c343e",
+    "type": "section_assignment",
+    "section_key": "carousel_top_right",
+    "content_source_type": "single_media",
+    "media_id": "4f28d42a-e92f-4ed0-958e-cca0ad4f4f7b"
+  },
+  {
+    "id": "3971f270-e10e-409c-a33c-0dcb22ec9ebe",
+    "filename": "png_a7a5b14a",
+    "type": "image",
+    "url": "/static/uploads/png_a7a5b14a"
+  },
+  {
+    "id": "3982aaf9-ce99-4a2b-b1f6-5058c45cf5c3",
+    "type": "section_assignment",
+    "section_key": "carousel_bottom_left",
+    "content_source_type": "single_media",
+    "media_id": "3971f270-e10e-409c-a33c-0dcb22ec9ebe"
+  },
+  {
+    "id": "c28230e1-dc3c-4411-8e4a-46e9873dce05",
+    "filename": "BMW_ceb35940.png",
+    "type": "image",
+    "url": "/static/uploads/BMW_ceb35940.png"
+  },
+  {
+    "id": "96e218a4-0761-4560-a864-5be38589acbb",
+    "type": "section_assignment",
+    "section_key": "carousel_bottom_left",
+    "content_source_type": "single_media",
+    "media_id": "c28230e1-dc3c-4411-8e4a-46e9873dce05"
+  },
+  {
+    "id": "350545fc-5a0f-419b-a7c1-22ff5e8f863b",
+    "filename": "hollywood_595a515e.jpg",
+    "type": "image",
+    "url": "/static/uploads/hollywood_595a515e.jpg"
+  },
+  {
+    "id": "e08e977e-d705-41c3-a133-c72269c82945",
     "type": "section_assignment",
     "section_key": "carousel_bottom_right",
     "content_source_type": "single_media",
-    "media_id": "6bcf253b-05ad-4f51-97e5-a6f2cd1be3ce"
+    "media_id": "350545fc-5a0f-419b-a7c1-22ff5e8f863b"
   },
   {
-    "id": "385c34ab-f7e4-4c7a-b729-64d2d39dbdf6",
-    "filename": "BMW_ef6e87e9.jpg",
+    "id": "85b8ec2d-84b5-4e7f-b62f-ad2fba3ed914",
+    "filename": "png_b5622bf0",
     "type": "image",
-    "url": "/static/uploads/BMW_ef6e87e9.jpg"
+    "url": "/static/uploads/png_b5622bf0"
   },
   {
-    "id": "ea400dd4-e1ac-4eab-ac87-d1f34ab13b0e",
+    "id": "5adde43b-a7f3-4cd2-8e79-188d7ac7ac5e",
     "type": "section_assignment",
     "section_key": "carousel_bottom_right",
     "content_source_type": "single_media",
-    "media_id": "385c34ab-f7e4-4c7a-b729-64d2d39dbdf6"
+    "media_id": "85b8ec2d-84b5-4e7f-b62f-ad2fba3ed914"
   },
   {
-    "id": "6193de47-9fdb-4600-bbc2-ea447af823d3",
-    "filename": "jpg_5e2eba81",
-    "type": "image",
-    "url": "/static/uploads/jpg_5e2eba81"
+    "id": "a6f3fde0-54b1-48fd-a379-6c83bec804e8",
+    "filename": "MQAD_5f19602d.mp4",
+    "type": "video",
+    "url": "/static/uploads/MQAD_5f19602d.mp4"
   },
   {
-    "id": "6af35540-a94c-45cc-85ed-fe7472594eb7",
+    "id": "f0f50f02-da14-4482-a273-d1b0a880e442",
     "type": "section_assignment",
-    "section_key": "carousel_bottom_right",
+    "section_key": "header_video",
     "content_source_type": "single_media",
-    "media_id": "6193de47-9fdb-4600-bbc2-ea447af823d3"
+    "media_id": "a6f3fde0-54b1-48fd-a379-6c83bec804e8"
+  },
+  {
+    "id": "bccd369e-294a-4b53-90ee-015101746d97",
+    "filename": "footer_2b52d7db.mp4",
+    "type": "video",
+    "url": "/static/uploads/footer_2b52d7db.mp4"
+  },
+  {
+    "id": "1507a200-e6e6-4854-869a-52b2ef701995",
+    "type": "section_assignment",
+    "section_key": "footer_content",
+    "content_source_type": "single_media",
+    "media_id": "bccd369e-294a-4b53-90ee-015101746d97"
+  },
+  {
+    "id": "59c81895-c8c3-42e1-9db5-4797dab56f13",
+    "filename": "footer-video_41caa8f0.mp4",
+    "type": "video",
+    "url": "/static/uploads/footer-video_41caa8f0.mp4"
+  },
+  {
+    "id": "2850b121-761a-46a5-b221-804730edc20c",
+    "type": "section_assignment",
+    "section_key": "footer_content",
+    "content_source_type": "single_media",
+    "media_id": "59c81895-c8c3-42e1-9db5-4797dab56f13"
   }
 ]

@@ -311,7 +311,78 @@ def get_media_with_settings():
     })
 
 
-# ... (create_carousel_group, update_carousel_group_images, delete_media_item, delete_carousel_group, get_status, socketio handlers 保持不變) ...
+@app.route('/admin/media/delete/<item_id>', methods=['POST'])
+def delete_media_item(item_id):
+    if request.method == 'POST':
+        media_items = load_media_data()
+        final_list = []
+        item_deleted = False
+        deleted_item_type = "未知項目"
+        
+        # 先找到要刪除的項目，確定其類型
+        target_item = None
+        for item in media_items:
+            if item.get('id') == item_id:
+                target_item = item
+                item_deleted = True
+                if item.get('type') in ['image', 'video']:
+                    deleted_item_type = "素材"
+                elif item.get('type') == 'section_assignment':
+                    deleted_item_type = "指派"
+                break
+        
+        # 根據項目類型進行不同的處理
+        if target_item and target_item.get('type') in ['image', 'video']:
+            # 如果是素材，需要同時刪除使用該素材的指派，並排除該素材本身
+            for item in media_items:
+                # 排除要刪除的素材
+                if item.get('id') == item_id:
+                    continue
+                    
+                # 排除使用該素材的指派
+                if item.get('type') == 'section_assignment' and \
+                   item.get('content_source_type') == 'single_media' and \
+                   item.get('media_id') == item_id:
+                    print(f"同時移除使用已刪除素材 {item_id} 的指派: {item.get('id')}")
+                    continue
+                    
+                # 處理輪播組中的圖片引用
+                if item.get('type') == 'carousel_group' and item.get('image_ids') and item_id in item.get('image_ids'):
+                    # 從輪播組中移除該圖片ID
+                    item['image_ids'].remove(item_id)
+                    
+                # 將其他項目添加到最終列表
+                final_list.append(item)
+                
+            # 刪除實際檔案
+            if 'filename' in target_item and target_item['filename']:
+                try:
+                    file_path = os.path.join(app.config['UPLOAD_FOLDER'], target_item['filename'])
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+                        print(f"已刪除檔案: {file_path}")
+                except Exception as e:
+                    print(f"刪除檔案時發生錯誤: {e}")
+                    
+        elif target_item and target_item.get('type') == 'section_assignment':
+            # 如果是指派，只刪除指派本身，不刪除相關素材
+            for item in media_items:
+                if item.get('id') != item_id:
+                    final_list.append(item)
+        else:
+            # 如果沒有找到要刪除的項目，或者類型不是素材或指派，保留所有項目
+            final_list = media_items
+                
+        if item_deleted:
+            save_media_data(final_list)
+            print(f"{deleted_item_type} ID: {item_id} 已被刪除。")
+            socketio.emit('media_updated', {'message': f'{deleted_item_type}已刪除!'}, namespace='/')
+        else:
+            print(f"錯誤：找不到 ID 為 {item_id} 的項目來刪除。")
+            
+        return redirect(url_for('admin_page'))
+    return redirect(url_for('admin_page'))
+
 @app.route('/admin/carousel_group/create', methods=['POST'])
 def create_carousel_group():
     if request.method == 'POST':

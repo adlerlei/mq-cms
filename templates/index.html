@@ -5,11 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Git-Bulma</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bulma.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
   </head>
 
   <body>
-    <div class="column is-full p-0">
+    <div id="header-content-container" class="column is-full p-0">
       <figure class="image is-16by9">
         <video id="header-video-player" class="has-ratio" width="1920" height="1080" autoplay loop muted playsinline>
           您的瀏覽器不支持 HTML5 視頻
@@ -36,12 +36,10 @@
           </div>
       </div>
     </div>
-    <div id="footer-content-container" class="column is-full p-0">
+    <div id="footer-content-container" class="p-0">
         </div>
 
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script> 
-    
-    <script src="js/animation.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="{{ url_for('static', filename='js/animation.js') }}"></script>
   </body>
 </html>

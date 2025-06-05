@@ -99,10 +99,14 @@ function updateAllSections(data) {
     carouselInnerIds.forEach(id => {
       const innerElement = document.getElementById(id);
       if (innerElement) {
-        const container = innerElement.closest('.carousel-container');
-        if (container) {
-          innerElement.innerHTML = '';
-          initializeGenericCarousel(container, 0); // 清空後不需要輪播，間隔設為0
+        try {
+          const container = innerElement.closest('.carousel-container');
+          if (container) {
+            innerElement.innerHTML = '';
+            initializeGenericCarousel(container, 0); // 清空後不需要輪播，間隔設為0
+          }
+        } catch (error) {
+          console.error(`清空輪播區域時發生錯誤: ${error.message}`);
         }
       }
     });
@@ -129,8 +133,12 @@ async function fetchMediaData() {
 
 // 通用函數：填充並初始化指定區塊的內容 (圖片或影片，可輪播)
 function populateSectionContent(containerId, sectionKey, mediaItems, slideInterval) {
+  try {
     const container = document.getElementById(containerId);
-    if (!container) return;
+    if (!container) {
+      console.log(`找不到容器元素: ${containerId}`);
+      return;
+    }
 
     // 清除舊內容和定時器
     container.innerHTML = '';
@@ -142,113 +150,168 @@ function populateSectionContent(containerId, sectionKey, mediaItems, slideInterv
     const sectionContent = mediaItems.filter(item => item.section_key === sectionKey);
 
     if (sectionContent.length > 0) {
-        // 為多個項目創建一個內部輪播容器
-        const innerCarousel = document.createElement('div');
-        innerCarousel.classList.add('carousel-inner'); // 使用 carousel-inner class
-        innerCarousel.style.display = 'flex'; // 確保 flex 佈局
-        innerCarousel.style.width = '100%';
-        innerCarousel.style.height = '100%'; // 讓內容填滿容器
+      // 為多個項目創建一個內部輪播容器
+      const innerCarousel = document.createElement('div');
+      innerCarousel.classList.add('carousel-inner'); // 使用 carousel-inner class
+      innerCarousel.style.display = 'flex'; // 確保 flex 佈局
+      innerCarousel.style.width = '100%';
+      innerCarousel.style.height = '100%'; // 讓內容填滿容器
 
-        sectionContent.forEach(itemData => {
-            const itemWrapper = document.createElement('figure'); // 使用 figure 作為項目包裝
-            itemWrapper.classList.add('image', 'is-16by9', 'carousel-item'); // Bulma responsive image and carousel item class
-            itemWrapper.style.flex = '0 0 100%'; // 確保每個項目佔滿視窗寬度
-            itemWrapper.style.position = 'relative'; // 為內容定位
-
-            if (itemData.type === 'video') {
-                const videoElement = document.createElement('video');
-                videoElement.classList.add('has-ratio'); // Bulma has-ratio class
-                videoElement.style.position = 'absolute';
-                videoElement.style.top = '0';
-                videoElement.style.left = '0';
-                videoElement.style.width = '100%';
-                videoElement.style.height = '100%';
-                videoElement.autoplay = true;
-                videoElement.loop = true;
-                videoElement.muted = true;
-                videoElement.playsInline = true;
-                const sourceElement = document.createElement('source');
-                sourceElement.src = `${SERVER_BASE_URL}${itemData.url}`;
-                sourceElement.type = 'video/mp4';
-                videoElement.appendChild(sourceElement);
-                videoElement.appendChild(document.createTextNode('您的瀏覽器不支持 HTML5 視頻。'));
-                itemWrapper.appendChild(videoElement);
-            } else if (itemData.type === 'image') {
-                const imgElement = document.createElement('img');
-                imgElement.src = `${SERVER_BASE_URL}${itemData.url}`;
-                imgElement.alt = itemData.filename || '圖片';
-                imgElement.style.position = 'absolute';
-                imgElement.style.top = '0';
-                imgElement.style.left = '0';
-                imgElement.style.width = '100%';
-                imgElement.style.height = '100%';
-                imgElement.style.objectFit = 'cover'; // 確保圖片覆蓋整個區域
-                itemWrapper.appendChild(imgElement);
-            } else {
-                itemWrapper.textContent = `不支援的媒體類型: ${itemData.type}`;
-            }
-            innerCarousel.appendChild(itemWrapper);
-        });
-
-        container.appendChild(innerCarousel);
-        
-        // 對於頁首和頁尾，我們將它們的容器變成一個可以進行輪播的元素
-        // 頁首和頁尾的父容器已經是 column is-full p-0
-        // 將其視為 carousel-container，因為 initializeGenericCarousel 需要這個 class
-        // 或者為它們創建一個新的包裝 div
-        const wrapperDiv = document.createElement('div');
-        wrapperDiv.classList.add('carousel-container'); // 添加 carousel-container class
-        wrapperDiv.style.width = '100%';
-        wrapperDiv.style.height = '100%';
-        wrapperDiv.style.overflow = 'hidden';
-        wrapperDiv.style.position = 'relative';
-
-        wrapperDiv.appendChild(innerCarousel); // 将 innerCarousel 放入 wrapperDiv
-        container.appendChild(wrapperDiv); // 将 wrapperDiv 放入原始容器
-
-        // 初始化輪播動畫
-        if (sectionContent.length > 1 && slideInterval > 0) { // 只有多個項目且間隔大於0才輪播
-          initializeGenericCarousel(wrapperDiv, slideInterval);
-          console.log(`區塊 ${sectionKey} 已啟用輪播，間隔 ${slideInterval / 1000} 秒`);
-        } else if (sectionContent.length === 1) {
-          console.log(`區塊 ${sectionKey} 顯示單一內容。`);
-          // 如果是單一影片，確保它自動播放
-          const videoElement = innerCarousel.querySelector('video');
-          if (videoElement) {
-              videoElement.play().catch(e => console.error(`影片 ${sectionKey} 自動播放失敗:`, e));
+      sectionContent.forEach(itemData => {
+          const itemWrapper = document.createElement('figure'); // 使用 figure 作為項目包裝
+          
+          // 根據區塊類型應用不同的樣式
+          if (sectionKey === 'header_video') {
+            // 對於頁首，保留 is-16by9 類別
+            itemWrapper.classList.add('image', 'is-16by9', 'carousel-item');
+          } else if (sectionKey === 'footer_content') {
+            // 對於頁尾，不使用 is-16by9 類別
+            itemWrapper.classList.add('image', 'carousel-item');
+          } else {
+            // 對於其他輪播區塊，不使用 is-16by9 類別
+            itemWrapper.classList.add('image', 'carousel-item');
           }
-        } else {
-            console.log(`區塊 ${sectionKey} 沒有內容。`);
-        }
+          
+          itemWrapper.style.flex = '0 0 100%'; // 確保每個項目佔滿視窗寬度
+          itemWrapper.style.position = 'relative'; // 為內容定位
 
-    } else {
-        console.log(`沒有找到區塊 ${sectionKey} 的媒體資料。`);
-    }
+          if (itemData.type === 'video') {
+              const videoElement = document.createElement('video');
+              videoElement.classList.add('has-ratio'); // Bulma has-ratio class
+              // videoElement.style.position = 'absolute';
+              videoElement.style.top = '0';
+              videoElement.style.left = '0';
+              videoElement.style.width = '100%';
+              videoElement.style.height = 'auto';
+              videoElement.autoplay = true;
+              videoElement.loop = true;
+              videoElement.muted = true;
+              videoElement.playsInline = true;
+              videoElement.controls = true; // 添加 controls 屬性
+              const sourceElement = document.createElement('source');
+              sourceElement.src = `${SERVER_BASE_URL}${itemData.url}`;
+              sourceElement.type = 'video/mp4';
+              videoElement.appendChild(sourceElement);
+              videoElement.appendChild(document.createTextNode('您的瀏覽器不支持 HTML5 視頻。'));
+              itemWrapper.appendChild(videoElement);
+          } else if (itemData.type === 'image') {
+              const imgElement = document.createElement('img');
+              imgElement.src = `${SERVER_BASE_URL}${itemData.url}`;
+              imgElement.alt = itemData.filename || '圖片';
+              imgElement.style.position = 'absolute';
+              imgElement.style.top = '0';
+              imgElement.style.left = '0';
+              imgElement.style.width = '100%';
+              imgElement.style.height = '100%';
+              
+              // 根據區塊類型應用不同的 objectFit
+              if (sectionKey === 'header_video' || sectionKey === 'footer_content') {
+                // 對於頁首和頁尾，使用 cover
+                imgElement.style.objectFit = 'cover';
+              } else {
+                // 對於其他輪播區塊，使用 contain
+                imgElement.style.objectFit = 'contain';
+              }
+              
+              itemWrapper.appendChild(imgElement);
+          } else {
+              itemWrapper.textContent = `不支援的媒體類型: ${itemData.type}`;
+          }
+          innerCarousel.appendChild(itemWrapper);
+      });
+
+      container.appendChild(innerCarousel);
+      
+      // 對於頁首和頁尾，我們將它們的容器變成一個可以進行輪播的元素
+      // 頁首和頁尾的父容器已經是 column is-full p-0
+      // 將其視為 carousel-container，因為 initializeGenericCarousel 需要這個 class
+      // 或者為它們創建一個新的包裝 div
+      const wrapperDiv = document.createElement('div');
+      wrapperDiv.classList.add('carousel-container'); // 添加 carousel-container class
+      wrapperDiv.style.width = '100%';
+      wrapperDiv.style.height = 'auto'; // 將高度設置為 auto
+      // wrapperDiv.style.overflow = 'hidden'; // 移除此行
+      wrapperDiv.style.position = 'relative'; // 加回此行
+
+      wrapperDiv.appendChild(innerCarousel); // 将 innerCarousel 放入 wrapperDiv
+      container.appendChild(wrapperDiv); // 将 wrapperDiv 放入原始容器
+      
+      // 初始化輪播動畫
+      if (sectionContent.length > 1 && slideInterval > 0) { // 只有多個項目且間隔大於0才輪播
+        initializeGenericCarousel(wrapperDiv, slideInterval);
+        console.log(`區塊 ${sectionKey} 已啟用輪播，間隔 ${slideInterval / 1000} 秒`);
+      } else if (sectionContent.length === 1) {
+        console.log(`區塊 ${sectionKey} 顯示單一內容。`);
+        // 如果是單一影片，確保它自動播放
+        const videoElement = innerCarousel.querySelector('video');
+        if (videoElement) {
+            videoElement.play().catch(e => {
+              // 處理特定的 AbortError 錯誤，這通常是由於瀏覽器節能策略導致的
+              if (e.name === 'AbortError') {
+                console.log(`影片 ${sectionKey} 自動播放被瀏覽器中斷 (節能模式)，這是正常的行為。`);
+              } else {
+                console.error(`影片 ${sectionKey} 自動播放失敗:`, e);
+              }
+            });
+        }
+      } else {
+          console.log(`區塊 ${sectionKey} 沒有內容。`);
+      }
+
+  } else {
+      console.log(`沒有找到區塊 ${sectionKey} 的媒體資料。`);
+  }
+  } catch (error) {
+    console.error(`填充區塊 ${sectionKey} 內容時發生錯誤: ${error.message}`);
+  }
 }
 
 
 // 更新頁首內容 (現在也支持輪播)
 function updateHeaderContent(mediaItems, headerInterval) {
-  // 將 header-video-player 視為一個輪播容器
-  const headerPlayerContainer = document.getElementById('header-video-player').closest('.column'); // 獲取其父級 column
-  // 如果原始的 video player 是一個 figure，我們可能需要找到它的容器
-  // 在 index.html 中 header-video-player 是 video 標籤，其父級是 figure
-  // 我們需要找到 figure 的父級 div.column，並將其視為 carousel-container
-  // 或者直接對 header-video-player 的父級 figure 進行改造
-  // 為了簡化，我們直接為它創建一個新的包裝 div
-  populateSectionContent('header-content-container', 'header_video', mediaItems, headerInterval); // 使用 header-content-container ID
+  try {
+    // 檢查 header-video-player 元素是否存在
+    const headerVideoPlayer = document.getElementById('header-video-player');
+    if (headerVideoPlayer) {
+      // 將 header-video-player 視為一個輪播容器
+      const headerPlayerContainer = headerVideoPlayer.closest('.column'); // 獲取其父級 column
+      // 如果原始的 video player 是一個 figure，我們可能需要找到它的容器
+      // 在 index.html 中 header-video-player 是 video 標籤，其父級是 figure
+      // 我們需要找到 figure 的父級 div.column，並將其視為 carousel-container
+      // 或者直接對 header-video-player 的父級 figure 進行改造
+      // 為了簡化，我們直接為它創建一個新的包裝 div
+      populateSectionContent('header-content-container', 'header_video', mediaItems, headerInterval); // 使用 header-content-container ID
+    } else {
+      console.log('找不到 header-video-player 元素');
+    }
+  } catch (error) {
+    console.error(`更新頁首內容時發生錯誤: ${error.message}`);
+  }
 }
 
 // 更新頁尾內容 (現在也支持輪播)
 function updateFooterContent(mediaItems, footerInterval) {
-  populateSectionContent('footer-content-container', 'footer_content', mediaItems, footerInterval);
+  try {
+    // 檢查 footer-content-container 元素是否存在
+    const footerContainer = document.getElementById('footer-content-container');
+    if (footerContainer) {
+      populateSectionContent('footer-content-container', 'footer_content', mediaItems, footerInterval);
+    } else {
+      console.log('找不到 footer-content-container 元素');
+    }
+  } catch (error) {
+    console.error(`更新頁尾內容時發生錯誤: ${error.message}`);
+  }
 }
 
 
 // 更新中間輪播區塊 (使用通用輪播函數)
 function updateCarousel(mediaItems, sectionKey, carouselInnerId, carouselInterval) {
   const carouselInnerElement = document.getElementById(carouselInnerId);
-  if (!carouselInnerElement) return;
+  if (!carouselInnerElement) {
+    console.log(`找不到輪播內容元素: ${carouselInnerId}`);
+    return;
+  }
   carouselInnerElement.innerHTML = ''; // 清除舊內容
 
   const carouselItemsData = mediaItems.filter(item => item.section_key === sectionKey);
@@ -256,17 +319,33 @@ function updateCarousel(mediaItems, sectionKey, carouselInnerId, carouselInterva
   if (carouselItemsData.length > 0) {
     carouselItemsData.forEach(itemData => {
       const figureElement = document.createElement('figure');
-      figureElement.classList.add('image', 'carousel-item', 'is-16by9'); // 添加 is-16by9
+      figureElement.classList.add('carousel-item');
+      
+      const imageContainer = document.createElement('div');
+      imageContainer.classList.add('carousel-image-container');
+      
       const imgElement = document.createElement('img');
       imgElement.src = `${SERVER_BASE_URL}${itemData.url}`;
-      imgElement.alt = itemData.filename || '輪播圖片'; 
-      figureElement.appendChild(imgElement);
+      imgElement.alt = itemData.filename || '輪播圖片';
+      
+      imageContainer.appendChild(imgElement);
+      figureElement.appendChild(imageContainer);
       carouselInnerElement.appendChild(figureElement);
     });
   }
-  const carouselContainer = carouselInnerElement.closest('.carousel-container');
-  if (carouselContainer) {
-    initializeGenericCarousel(carouselContainer, carouselInterval); // 使用傳入的間隔
+  
+  try {
+    // 確保 carouselInnerElement 存在且不為 null 才調用 closest
+    if (carouselInnerElement) {
+      const carouselContainer = carouselInnerElement.closest('.carousel-container');
+      if (carouselContainer) {
+        initializeGenericCarousel(carouselContainer, carouselInterval); // 使用傳入的間隔
+      } else {
+        console.log(`找不到輪播容器元素，無法初始化輪播: ${carouselInnerId}`);
+      }
+    }
+  } catch (error) {
+    console.error(`初始化輪播時發生錯誤: ${error.message}`);
   }
 }
 
