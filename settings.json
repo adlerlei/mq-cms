@@ -1,6 +1,6 @@
 {
-  "header_interval": 5,
-  "carousel_interval": 3,
+  "header_interval": 3,
+  "carousel_interval": 2,
   "footer_interval": 3,
   "type": "_global_settings_"
 }
