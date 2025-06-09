@@ -60,6 +60,60 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // =========================================================================
+    // 新增：全局播放設定表單處理 (New: Global Settings Form Handling)
+    // =========================================================================
+    const globalSettingsForm = document.getElementById('globalSettingsForm');
+    const saveSettingsButton = document.getElementById('saveSettingsButton');
+    const settingsNotification = document.getElementById('settings-notification');
+
+    if (globalSettingsForm) {
+        globalSettingsForm.addEventListener('submit', async (event) => {
+            event.preventDefault(); // 阻止表單預設的刷新頁面行為
+
+            saveSettingsButton.classList.add('is-loading');
+            saveSettingsButton.disabled = true;
+            settingsNotification.classList.add('is-hidden');
+
+            const payload = {
+                header_interval: document.getElementById('header_interval').value,
+                carousel_interval: document.getElementById('carousel_interval').value,
+                footer_interval: document.getElementById('footer_interval').value
+            };
+
+            try {
+                const response = await fetchWithAuth('/admin/settings/update', {
+                    method: 'POST',
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    settingsNotification.textContent = data.message || '設定儲存成功！';
+                    settingsNotification.classList.remove('is-hidden', 'is-danger');
+                    settingsNotification.classList.add('is-success');
+                } else {
+                    throw new Error(data.message || '儲存設定失敗。');
+                }
+
+            } catch (error) {
+                if (error.message !== 'Unauthorized') {
+                    settingsNotification.textContent = error.message;
+                    settingsNotification.classList.remove('is-hidden', 'is-success');
+                    settingsNotification.classList.add('is-danger');
+                }
+            } finally {
+                saveSettingsButton.classList.remove('is-loading');
+                saveSettingsButton.disabled = false;
+                 // 3秒後自動隱藏提示訊息
+                setTimeout(() => {
+                    settingsNotification.classList.add('is-hidden');
+                }, 3000);
+            }
+        });
+    }
+
+    // =========================================================================
     // 既有功能：檔案上傳表單 (Existing: File Upload Form)
     // =========================================================================
     
@@ -223,20 +277,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- 輪播組 Modal 內部相關的既有函式 (填充、新增、移除、拖曳) ---
-    function populateAvailableImages(currentGroupId) { /* ... 此處保留原版 admin.js 完整程式碼 ... */ }
-    function populateSelectedImages(groupId) { /* ... 此處保留原版 admin.js 完整程式碼 ... */ }
-    function addSelectedImageToDOM(imageId, imageUrl, imageFilename) { /* ... 此處保留原版 admin.js 完整程式碼 ... */ }
-    function handleDragStart(e) { /* ... 此處保留原版 admin.js 完整程式碼 ... */ }
-    function handleDragEnd(e) { /* ... 此處保留原版 admin.js 完整程式碼 ... */ }
-    function handleDragOver(e) { /* ... 此處保留原版 admin.js 完整程式碼 ... */ }
-    function handleDrop(e) { /* ... 此處保留原版 admin.js 完整程式碼 ... */ }
-    function handleDragEnter(e) { /* ... 此處保留原版 admin.js 完整程式碼 ... */ }
-    function handleDragLeave(e) { /* ... 此處保留原版 admin.js 完整程式碼 ... */ }
-    function getDragAfterElement(container, y) { /* ... 此處保留原版 admin.js 完整程式碼 ... */ }
-    
-    // (由於這些函式沒有邏輯變更，為求簡潔在此以註解表示，實際貼上時請使用您原始檔中的完整函式)
-    // Note for implementation: The full original code for the functions above is required.
-    // Pasting the full functions here for completeness.
     function populateAvailableImages(currentGroupId) {
         if(!availableImagesListDiv) return;
         availableImagesListDiv.innerHTML = '';
