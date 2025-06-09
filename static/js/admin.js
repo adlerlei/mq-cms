@@ -1,5 +1,68 @@
 // 確保在 DOM 完全載入後執行腳本
 document.addEventListener('DOMContentLoaded', () => {
+
+    // =========================================================================
+    // Task 3: 使用者認證與 API 請求處理 (Authentication & API Handling)
+    // =========================================================================
+
+    const JWT_TOKEN = localStorage.getItem('jwt_token');
+
+    // 路由守衛 (Route Guard): 如果沒有 token，立即重導向到登入頁面
+    if (!JWT_TOKEN) {
+        // 假設後端 Flask 的登入頁面路由是 /login
+        window.location.href = '/login'; 
+        // 停止執行此腳本的任何後續程式碼，因為使用者未經授權
+        return; 
+    }
+
+    /**
+     * API 請求封裝 (API Request Wrapper)
+     * 一個輔助函數，用於發送帶有 JWT 認證標頭的 fetch 請求。
+     * 它會自動處理 401 (未授權) 錯誤，將使用者登出並重導向。
+     * @param {string} url - The URL to fetch.
+     * @param {object} options - Options for the fetch request (e.g., method, body).
+     * @returns {Promise<Response>} - The fetch response promise.
+     */
+    async function fetchWithAuth(url, options = {}) {
+        // 準備請求標頭，加入 Authorization
+        const headers = {
+            ...options.headers,
+            'Authorization': `Bearer ${JWT_TOKEN}`
+        };
+
+        // 如果請求主體不是 FormData，則設定 Content-Type 為 application/json
+        // (fetch 會為 FormData 自動設定正確的 multipart/form-data 標頭)
+        if (!(options.body instanceof FormData)) {
+            headers['Content-Type'] = 'application/json';
+        }
+
+        const response = await fetch(url, { ...options, headers });
+
+        // 檢查 Token 是否失效
+        if (response.status === 401) {
+            localStorage.removeItem('jwt_token');
+            alert('您的登入已逾期或無效，請重新登入。');
+            window.location.href = '/login';
+            // 拋出錯誤以中斷當前的 try...catch 鏈
+            throw new Error('Unauthorized');
+        }
+
+        return response;
+    }
+    
+    // 登出按鈕事件監聽
+    const logoutButton = document.getElementById('logoutButton');
+    if(logoutButton) {
+        logoutButton.addEventListener('click', () => {
+            localStorage.removeItem('jwt_token');
+            window.location.href = '/login';
+        });
+    }
+
+    // =========================================================================
+    // 既有功能：檔案上傳表單 (Existing: File Upload Form)
+    // =========================================================================
+    
     // 選取檔案輸入框和檔案名稱顯示元素
     const fileInput = document.querySelector('.file-input');
     const fileNameDisplay = document.querySelector('.file-name');
@@ -25,14 +88,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    if (uploadForm) { // progressBarContainer, progressBar, progressText, uploadFormSubmitButton can be checked inside if needed
+    if (uploadForm) {
         uploadForm.addEventListener('submit', function(event) {
+            event.preventDefault(); // 阻止表單預設提交
+
             if (!uploadForm.checkValidity()) {
                 console.warn('HTML5 表單驗證未通過 (uploadForm)。');
                 return;
             }
-            event.preventDefault();
-
+            
+            // UI 狀態更新
             if(progressBarContainer) progressBarContainer.style.display = 'block';
             if(progressBar) progressBar.value = 0;
             if(progressText) progressText.textContent = '0%';
@@ -42,6 +107,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const formData = new FormData(uploadForm);
             const xhr = new XMLHttpRequest();
 
+            // 上傳進度監聽
             xhr.upload.addEventListener('progress', function(e) {
                 if (e.lengthComputable) {
                     const percentage = Math.round((e.loaded / e.total) * 100);
@@ -50,21 +116,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
 
+            // 上傳完成後的回呼
             xhr.addEventListener('load', function() {
-                if(progressBar) progressBar.value = 100;
-                if(progressText) progressText.textContent = '100%';
                 resetUploadFormState();
+                
+                // **認證修改**: 處理 401 錯誤
+                if (xhr.status === 401) {
+                    localStorage.removeItem('jwt_token');
+                    alert('您的登入已逾期或無效，請重新登入。');
+                    window.location.href = '/login';
+                    return;
+                }
 
-                if (xhr.status === 200 || xhr.status === 302) {
+                if (xhr.status >= 200 && xhr.status < 300) {
                     console.log('操作成功 (uploadForm)，正在重新載入頁面...');
                     window.location.reload();
                 } else {
                     console.error('操作失敗 (uploadForm):', xhr.status, xhr.responseText);
-                    alert(`操作失敗: ${xhr.status} - ${xhr.statusText || '未知錯誤'}`);
-                    resetUploadFormState(2000);
+                    alert(`操作失敗: ${xhr.status} - ${xhr.responseText || '未知錯誤'}`);
                 }
             });
-
+            
             xhr.addEventListener('error', function() {
                 console.error('上傳過程中發生網路錯誤。');
                 alert('上傳過程中發生網路錯誤，請檢查您的網路連線。');
@@ -75,35 +147,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.warn('上傳已中止。');
                 resetUploadFormState(1000);
             });
-
+            
             xhr.open('POST', uploadForm.action, true);
+            // **認證修改**: 在 XHR 請求中加入 Authorization 標頭
+            xhr.setRequestHeader('Authorization', `Bearer ${JWT_TOKEN}`);
             xhr.send(formData);
         });
     }
 
-    // --- 輪播圖片組 Modal 相關邏輯 ---
-    const editModal = document.getElementById('editCarouselGroupModal');
+    // =========================================================================
+    // 既有功能：輪播圖片組 Modal (Existing: Carousel Group Modal)
+    // =========================================================================
+    const editCarouselGroupModal = document.getElementById('editCarouselGroupModal');
     const modalGroupName = document.getElementById('modalGroupName');
     const modalGroupIdInput = document.getElementById('modalGroupId');
     const selectedImagesListDiv = document.getElementById('selectedImagesList');
     const availableImagesListDiv = document.getElementById('availableImagesList');
     const saveGroupChangesButton = document.getElementById('saveGroupChangesButton');
-    const cancelGroupChangesButton = document.getElementById('cancelGroupChangesButton');
-    const modalCloseButton = editModal ? editModal.querySelector('.delete') : null;
-    const modalBackground = editModal ? editModal.querySelector('.modal-background') : null;
 
-    function openModal() {
-        if(editModal) editModal.classList.add('is-active');
-    }
+    function openCarouselModal() { if(editCarouselGroupModal) editCarouselGroupModal.classList.add('is-active'); }
+    function closeCarouselModal() { if(editCarouselGroupModal) editCarouselGroupModal.classList.remove('is-active'); }
 
-    function closeModal() {
-        if(editModal) editModal.classList.remove('is-active');
-        if(selectedImagesListDiv) selectedImagesListDiv.innerHTML = '<p class="has-text-grey-light has-text-centered p-4">此群組尚無圖片</p>';
-        if(availableImagesListDiv) availableImagesListDiv.innerHTML = '';
-        if(modalGroupIdInput) modalGroupIdInput.value = '';
-        if(modalGroupName) modalGroupName.textContent = '';
-    }
-
+    // 開啟編輯輪播組 Modal
     document.querySelectorAll('.edit-group-images-button').forEach(button => {
         button.addEventListener('click', function() {
             const groupId = this.dataset.groupId;
@@ -112,12 +177,69 @@ document.addEventListener('DOMContentLoaded', () => {
             if(modalGroupName) modalGroupName.textContent = groupName;
             populateAvailableImages(groupId);
             populateSelectedImages(groupId);
-            openModal();
+            openCarouselModal();
         });
     });
 
+    // 關閉 Modal 的所有方式
+    editCarouselGroupModal?.querySelector('.delete')?.addEventListener('click', closeCarouselModal);
+    editCarouselGroupModal?.querySelector('#cancelGroupChangesButton')?.addEventListener('click', closeCarouselModal);
+    editCarouselGroupModal?.querySelector('.modal-background')?.addEventListener('click', closeCarouselModal);
+
+    // 儲存輪播組變更
+    if (saveGroupChangesButton) {
+        saveGroupChangesButton.addEventListener('click', async function() {
+            const groupId = modalGroupIdInput.value;
+            const selectedImageElements = selectedImagesListDiv?.querySelectorAll('.media-item-entry.draggable-item') || [];
+            const imageIdsInOrder = Array.from(selectedImageElements).map(el => el.dataset.imageId);
+
+            this.classList.add('is-loading');
+
+            try {
+                // **認證修改**: 使用 fetchWithAuth
+                const response = await fetchWithAuth(`/admin/carousel_group/update_images/${groupId}`, {
+                    method: 'POST',
+                    body: JSON.stringify({ image_ids: imageIdsInOrder }),
+                });
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.message || '伺服器返回錯誤');
+                }
+                
+                // 成功後重載頁面以顯示最新狀態
+                window.location.reload();
+
+            } catch (error) {
+                // 如果錯誤不是 'Unauthorized' (因為它會自己處理)，就顯示錯誤訊息
+                if (error.message !== 'Unauthorized') {
+                    console.error('儲存輪播組失敗:', error);
+                    alert(`儲存失敗: ${error.message}`);
+                }
+            } finally {
+                this.classList.remove('is-loading');
+            }
+        });
+    }
+
+    // --- 輪播組 Modal 內部相關的既有函式 (填充、新增、移除、拖曳) ---
+    function populateAvailableImages(currentGroupId) { /* ... 此處保留原版 admin.js 完整程式碼 ... */ }
+    function populateSelectedImages(groupId) { /* ... 此處保留原版 admin.js 完整程式碼 ... */ }
+    function addSelectedImageToDOM(imageId, imageUrl, imageFilename) { /* ... 此處保留原版 admin.js 完整程式碼 ... */ }
+    function handleDragStart(e) { /* ... 此處保留原版 admin.js 完整程式碼 ... */ }
+    function handleDragEnd(e) { /* ... 此處保留原版 admin.js 完整程式碼 ... */ }
+    function handleDragOver(e) { /* ... 此處保留原版 admin.js 完整程式碼 ... */ }
+    function handleDrop(e) { /* ... 此處保留原版 admin.js 完整程式碼 ... */ }
+    function handleDragEnter(e) { /* ... 此處保留原版 admin.js 完整程式碼 ... */ }
+    function handleDragLeave(e) { /* ... 此處保留原版 admin.js 完整程式碼 ... */ }
+    function getDragAfterElement(container, y) { /* ... 此處保留原版 admin.js 完整程式碼 ... */ }
+    
+    // (由於這些函式沒有邏輯變更，為求簡潔在此以註解表示，實際貼上時請使用您原始檔中的完整函式)
+    // Note for implementation: The full original code for the functions above is required.
+    // Pasting the full functions here for completeness.
     function populateAvailableImages(currentGroupId) {
-        if(availableImagesListDiv) availableImagesListDiv.innerHTML = '';
+        if(!availableImagesListDiv) return;
+        availableImagesListDiv.innerHTML = '';
         const group = allMediaItemsForJS.find(item => item.id === currentGroupId && item.type === 'carousel_group');
         const selectedImageIdsInCurrentGroup = group ? group.image_ids || [] : [];
 
@@ -154,13 +276,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 entryDiv.appendChild(imgPreview);
                 entryDiv.appendChild(fileNameSpan);
                 entryDiv.appendChild(addButton);
-                availableImagesListDiv?.appendChild(entryDiv);
+                availableImagesListDiv.appendChild(entryDiv);
             });
-        } else if (availableImagesListDiv) {
+        } else {
             availableImagesListDiv.innerHTML = '<p class="has-text-grey-light has-text-centered p-4">沒有可用的圖片素材。</p>';
         }
     }
     function populateSelectedImages(groupId) {
+        if(!selectedImagesListDiv) return;
         selectedImagesListDiv.innerHTML = '';
         const group = allMediaItemsForJS.find(item => item.id === groupId && item.type === 'carousel_group');
         if (group && group.image_ids && group.image_ids.length > 0) {
@@ -170,11 +293,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     addSelectedImageToDOM(imgSrc.id, imgSrc.url, imgSrc.filename);
                 }
             });
-        } else if (selectedImagesListDiv) {
+        } else {
             selectedImagesListDiv.innerHTML = '<p class="has-text-grey-light has-text-centered p-4">此群組尚無圖片</p>';
         }
     }
-
     function addSelectedImageToDOM(imageId, imageUrl, imageFilename) {
         if (selectedImagesListDiv?.querySelector(`[data-image-id="${imageId}"]`)) return;
         if (selectedImagesListDiv?.querySelector('p.has-text-grey-light')) {
@@ -213,16 +335,190 @@ document.addEventListener('DOMContentLoaded', () => {
         entryDiv.addEventListener('dragstart', handleDragStart);
         entryDiv.addEventListener('dragend', handleDragEnd);
     }
-
+    let draggedItem = null;
+    let placeholder = null;
+    function handleDragStart(e) {
+        draggedItem = e.target.closest('.draggable-item');
+        if (!draggedItem) return;
+        if (e.dataTransfer) { e.dataTransfer.setData('text/plain', draggedItem.dataset.imageId); e.dataTransfer.effectAllowed = 'move'; }
+        setTimeout(() => { if(draggedItem) draggedItem.classList.add('dragging'); }, 0);
+    }
+    function handleDragEnd() {
+        if (!draggedItem) return;
+        draggedItem.classList.remove('dragging');
+        draggedItem = null;
+        if (placeholder) { placeholder.remove(); placeholder = null; }
+        selectedImagesListDiv?.classList.remove('drag-over-active');
+    }
+    function handleDragEnter(e) {
+        e.preventDefault();
+        if (draggedItem && selectedImagesListDiv?.contains(draggedItem)) {
+            selectedImagesListDiv?.classList.add('drag-over-active');
+        }
+    }
+    function handleDragLeave(e) {
+        if (!e.currentTarget.contains(e.relatedTarget) ) {
+            selectedImagesListDiv?.classList.remove('drag-over-active');
+            if (placeholder) { placeholder.remove(); placeholder = null; }
+        }
+    }
+    function handleDragOver(e) {
+        e.preventDefault();
+        if (!draggedItem || !selectedImagesListDiv?.contains(draggedItem)) return;
+        const container = selectedImagesListDiv;
+        const afterElement = getDragAfterElement(container, e.clientY);
+        if (!placeholder) {
+            placeholder = document.createElement('div');
+            placeholder.classList.add('drag-placeholder');
+        }
+        if (afterElement) { container.insertBefore(placeholder, afterElement); } 
+        else { container.appendChild(placeholder); }
+    }
+    function handleDrop(e) {
+        e.preventDefault();
+        if (!draggedItem || !selectedImagesListDiv?.contains(draggedItem)) return;
+        if (placeholder?.parentNode === selectedImagesListDiv) {
+            selectedImagesListDiv.insertBefore(draggedItem, placeholder);
+        }
+        if (placeholder) { placeholder.remove(); placeholder = null; }
+        selectedImagesListDiv?.classList.remove('drag-over-active');
+    }
+    function getDragAfterElement(container, y) {
+        const draggableElements = [...container.querySelectorAll('.draggable-item:not(.dragging)')];
+        return draggableElements.reduce((closest, child) => {
+            const box = child.getBoundingClientRect();
+            const offset = y - box.top - box.height / 2;
+            if (offset < 0 && offset > closest.offset) { return { offset: offset, element: child }; } 
+            else { return closest; }
+        }, { offset: Number.NEGATIVE_INFINITY }).element;
+    }
     selectedImagesListDiv?.addEventListener('dragover', handleDragOver);
     selectedImagesListDiv?.addEventListener('drop', handleDrop);
     selectedImagesListDiv?.addEventListener('dragenter', handleDragEnter);
     selectedImagesListDiv?.addEventListener('dragleave', handleDragLeave);
+    editCarouselGroupModal?.addEventListener('click', function(event) {
+        const target = event.target;
+        if (target.classList.contains('add-image-to-group-button') && !target.disabled) {
+            addSelectedImageToDOM(target.dataset.imageId, target.dataset.imageUrl, target.dataset.imageFilename);
+            target.disabled = true; target.textContent = '已加入'; target.classList.remove('is-success'); target.classList.add('is-light');
+        } else if (target.classList.contains('remove-image-from-group-button')) {
+            const imageIdToRemove = target.dataset.imageId;
+            const itemToRemove = selectedImagesListDiv?.querySelector(`.media-item-entry[data-image-id="${imageIdToRemove}"]`);
+            if (itemToRemove) {
+                itemToRemove.remove();
+                const correspondingAddButton = availableImagesListDiv?.querySelector(`.add-image-to-group-button[data-image-id="${imageIdToRemove}"]`);
+                if (correspondingAddButton) { correspondingAddButton.disabled = false; correspondingAddButton.textContent = '加入'; correspondingAddButton.classList.add('is-success'); correspondingAddButton.classList.remove('is-light'); }
+                if (selectedImagesListDiv && selectedImagesListDiv.children.length === 0) { selectedImagesListDiv.innerHTML = '<p class="has-text-grey-light has-text-centered p-4">此群組尚無圖片</p>'; }
+            }
+        }
+    });
 
-    if(modalCloseButton) modalCloseButton.addEventListener('click', closeModal);
-    if(cancelGroupChangesButton) cancelGroupChangesButton.addEventListener('click', closeModal);
-    if(modalBackground && editModal) modalBackground.addEventListener('click', closeModal); // Ensure editModal exists for modalBackground
+    // =========================================================================
+    // Task 1: 新功能 - 編輯「指派」Modal (New: Edit "Assignment" Modal)
+    // =========================================================================
+    
+    const editAssignmentModal = document.getElementById('editAssignmentModal');
+    const editAssignmentForm = document.getElementById('editAssignmentForm');
+    const editDirectFields = document.getElementById('editDirectAssignFields');
+    const editGroupFields = document.getElementById('editGroupAssignFields');
+    const saveAssignmentChangesButton = document.getElementById('saveAssignmentChangesButton');
 
+    function openEditAssignmentModal(data) {
+        if (!editAssignmentForm) return;
+        editAssignmentForm.reset();
+        editDirectFields.style.display = 'none';
+        editGroupFields.style.display = 'none';
+
+        document.getElementById('editAssignmentId').value = data.itemId;
+        document.getElementById('editAssignmentType').value = data.assignmentType;
+        const sectionName = available_sections_for_js[data.sectionKey] || data.sectionKey;
+        document.getElementById('editSectionKeyDisplay').value = sectionName;
+
+        if (data.assignmentType === 'single_media') {
+            editDirectFields.style.display = 'block';
+            const media = allMediaItemsForJS.find(m => m.id === data.mediaId);
+            document.getElementById('currentMediaFilename').textContent = media ? media.filename : '素材遺失';
+            document.getElementById('editMediaSelect').value = data.mediaId;
+        } else if (data.assignmentType === 'group_reference') {
+            editGroupFields.style.display = 'block';
+            document.getElementById('editCarouselGroupSelect').value = data.groupId;
+            document.getElementById('editOffsetInput').value = data.offset;
+        }
+
+        editAssignmentModal.classList.add('is-active');
+    }
+
+    function closeEditAssignmentModal() {
+        if(editAssignmentModal) editAssignmentModal.classList.remove('is-active');
+    }
+
+    document.querySelectorAll('.edit-assignment-button').forEach(button => {
+        button.addEventListener('click', function() {
+            const data = {
+                itemId: this.dataset.itemId,
+                assignmentType: this.dataset.assignmentType,
+                sectionKey: this.dataset.sectionKey,
+                mediaId: this.dataset.mediaId,
+                groupId: this.dataset.groupId,
+                offset: this.dataset.offset,
+            };
+            openEditAssignmentModal(data);
+        });
+    });
+    
+    // 關閉 Modal 的所有方式
+    editAssignmentModal?.querySelector('.delete')?.addEventListener('click', closeEditAssignmentModal);
+    editAssignmentModal?.querySelector('#cancelAssignmentChangesButton')?.addEventListener('click', closeEditAssignmentModal);
+    editAssignmentModal?.querySelector('.modal-background')?.addEventListener('click', closeEditAssignmentModal);
+    
+    // 儲存「指派」變更
+    if(saveAssignmentChangesButton) {
+        saveAssignmentChangesButton.addEventListener('click', async function() {
+            this.classList.add('is-loading');
+            const assignmentId = document.getElementById('editAssignmentId').value;
+            const assignmentType = document.getElementById('editAssignmentType').value;
+            
+            let payload = {};
+            if (assignmentType === 'single_media') {
+                payload.media_id = document.getElementById('editMediaSelect').value;
+                if (!payload.media_id) {
+                     alert("請選擇一個新的媒體素材。");
+                     this.classList.remove('is-loading');
+                     return;
+                }
+            } else {
+                payload.group_id = document.getElementById('editCarouselGroupSelect').value;
+                payload.offset = document.getElementById('editOffsetInput').value;
+            }
+
+            try {
+                // **認證修改**: 使用 fetchWithAuth
+                const response = await fetchWithAuth(`/api/assignment/update/${assignmentId}`, {
+                    method: 'POST', // 或 'PUT'，依後端設計
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.message || '更新指派失敗');
+                }
+                
+                window.location.reload();
+
+            } catch(error) {
+                if (error.message !== 'Unauthorized') {
+                    alert(`儲存失敗: ${error.message}`);
+                }
+            } finally {
+                 this.classList.remove('is-loading');
+            }
+        });
+    }
+
+
+    // =========================================================================
+    // 既有功能：主表單欄位動態顯示 (Existing: Main Form Dynamic Fields)
+    // =========================================================================
     const mediaTypeSelect = document.getElementById('mediaTypeSelect');
     const sectionKeyField = document.getElementById('sectionKeyField');
     const fileUploadField = document.getElementById('fileUploadField');
@@ -281,241 +577,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (mediaTypeSelect) {
         mediaTypeSelect.addEventListener('change', toggleFormFields);
+        // 頁面載入時，根據預設選項初始化表單欄位
         toggleFormFields();
     }
-
-    let draggedItem = null;
-    let placeholder = null;
-
-    function handleDragStart(e) {
-        draggedItem = e.target.closest('.draggable-item');
-        if (!draggedItem) return;
-        if (e.dataTransfer) {
-            e.dataTransfer.setData('text/plain', draggedItem.dataset.imageId);
-            e.dataTransfer.effectAllowed = 'move';
-        }
-        setTimeout(() => {
-            if(draggedItem) draggedItem.classList.add('dragging'); // 增加 null 檢查
-        }, 0);
-    }
-
-    function handleDragEnd(e) {
-        if (!draggedItem) return;
-        draggedItem.classList.remove('dragging');
-        draggedItem = null;
-        if (placeholder) {
-            placeholder.remove();
-            placeholder = null;
-        }
-        selectedImagesListDiv?.classList.remove('drag-over-active');
-    }
-
-    function handleDragEnter(e) {
-        e.preventDefault();
-        if (draggedItem && selectedImagesListDiv?.contains(draggedItem)) {
-            selectedImagesListDiv?.classList.add('drag-over-active');
-        }
-    }
-
-    function handleDragLeave(e) {
-        // If the mouse leaves the container and doesn't enter a child, or leaves the window
-        if (!e.currentTarget.contains(e.relatedTarget) ) {
-            selectedImagesListDiv?.classList.remove('drag-over-active');
-            if (placeholder) {
-                placeholder.remove();
-                placeholder = null;
-            }
-        }
-    }
-
-    function handleDragOver(e) {
-        e.preventDefault();
-        if (!draggedItem || !selectedImagesListDiv.contains(draggedItem)) return;
-        const container = selectedImagesListDiv;
-        const afterElement = getDragAfterElement(container, e.clientY);
-        if (!placeholder) {
-            placeholder = document.createElement('div');
-            placeholder.classList.add('drag-placeholder');
-            placeholder.style.height = '2px';
-            placeholder.style.backgroundColor = 'rgba(0,0,255,0.3)';
-            placeholder.style.margin = '5px 0';
-        }
-        if (draggedItem !== afterElement) {
-            if (afterElement) {
-                container.insertBefore(placeholder, afterElement);
-            } else {
-                container.appendChild(placeholder);
-            }
-        }
-    }
-
-    function handleDrop(e) {
-        e.preventDefault();
-        if (!draggedItem || !selectedImagesListDiv?.contains(draggedItem)) return;
-        if (placeholder && placeholder.parentNode === selectedImagesListDiv && selectedImagesListDiv) {
-            selectedImagesListDiv.insertBefore(draggedItem, placeholder);
-        } else if (draggedItem.parentNode === selectedImagesListDiv && selectedImagesListDiv) {
-             selectedImagesListDiv.appendChild(draggedItem);
-        }
-        // 清理 placeholder，因為 dragend 可能在 drop 之後或之前觸發，取決於瀏覽器
-        if (placeholder) {
-            placeholder.remove();
-            placeholder = null;
-        }
-        selectedImagesListDiv?.classList.remove('drag-over-active'); // 確保移除 active class
-    }
-
-    function getDragAfterElement(container, y) {
-        const draggableElements = [...container.querySelectorAll('.draggable-item:not(.dragging)')];
-        return draggableElements.reduce((closest, child) => {
-            const box = child.getBoundingClientRect(); // Potential error if child is not an element
-            const offset = y - box.top - box.height / 2;
-            if (offset < 0 && offset > closest.offset) {
-                return { offset: offset, element: child };
-            } else {
-                return closest;
-            }
-        }, { offset: Number.NEGATIVE_INFINITY }).element;
-    }
-
-    editModal?.addEventListener('click', function(event) {
-        const target = event.target;
-        if (target.classList.contains('add-image-to-group-button') && !target.disabled) {
-            const imageId = target.dataset.imageId;
-            const imageUrl = target.dataset.imageUrl;
-            const imageFilename = target.dataset.imageFilename;
-            addSelectedImageToDOM(imageId, imageUrl, imageFilename);
-            target.disabled = true;
-            target.textContent = '已加入';
-            target.classList.remove('is-success');
-            target.classList.add('is-light');
-        }
-        else if (target.classList.contains('remove-image-from-group-button')) {
-            const imageIdToRemove = target.dataset.imageId;
-            const itemToRemove = selectedImagesListDiv?.querySelector(`.media-item-entry[data-image-id="${imageIdToRemove}"]`);
-            if (itemToRemove) {
-                itemToRemove.remove();
-                const correspondingAddButton = availableImagesListDiv?.querySelector(`.add-image-to-group-button[data-image-id="${imageIdToRemove}"]`);
-                if (correspondingAddButton) {
-                    correspondingAddButton.disabled = false;
-                    correspondingAddButton.textContent = '加入';
-                    correspondingAddButton.classList.add('is-success');
-                    correspondingAddButton.classList.remove('is-light');
-                }
-                if (selectedImagesListDiv && (selectedImagesListDiv.children.length === 0 ||
-                    (selectedImagesListDiv.children.length === 1 && selectedImagesListDiv.firstElementChild?.tagName === 'P' && selectedImagesListDiv.firstElementChild.classList.contains('has-text-grey-light')))) {
-                     selectedImagesListDiv.innerHTML = '<p class="has-text-grey-light has-text-centered p-4">此群組尚無圖片</p>'; // Potential error if firstElementChild is null
-                }
-            }
-        }
-    });
-
-    if (saveGroupChangesButton) {
-        saveGroupChangesButton.addEventListener('click', function() {
-            const groupId = modalGroupIdInput.value;
-            const selectedImageElements = selectedImagesListDiv?.querySelectorAll('.media-item-entry.draggable-item') || [];
-            const imageIdsInOrder = Array.from(selectedImageElements).map(el => el.dataset.imageId);
-
-            console.log('要儲存的群組 ID:', groupId);
-            console.log('圖片順序:', imageIdsInOrder);
-
-            this.classList.add('is-loading');
-
-            fetch(`/admin/carousel_group/update_images/${groupId}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ image_ids: imageIdsInOrder }),
-            })
-            .then(response => {
-                if (!response.ok) {
-                    return response.json().then(err => { throw err; });
-                }
-                return response.json();
-            })
-            .then(data => {
-                this.classList.remove('is-loading');
-                if (data.success) {
-                    console.log('輪播組圖片順序已更新:', data.message);
-                    const groupIndex = allMediaItemsForJS.findIndex(item => item.id === groupId && item.type === 'carousel_group');
-                    if (groupIndex > -1) {
-                        allMediaItemsForJS[groupIndex].image_ids = imageIdsInOrder;
-                    }
-                    const groupRow = document.querySelector(`.edit-group-images-button[data-group-id="${groupId}"]`)
-                                        ?.closest('tr');
-                    if (groupRow && groupRow.cells.length > 2) {
-                        const countCell = groupRow.cells[2];
-                        countCell.textContent = imageIdsInOrder.length;
-                    }
-                    closeModal();
-                    // 為了確保 Arc 瀏覽器能顯示 alert，稍微延遲一下
-                    setTimeout(() => {
-                        alert('圖片順序已成功儲存！');
-                    }, 100); // 延遲 100 毫秒
-                } else {
-                    console.error('儲存圖片順序失敗:', data.message);
-                    alert(`儲存圖片順序失敗: ${data.message || '未知錯誤'}`);
-                }
-            })
-            .catch(error => {
-                this.classList.remove('is-loading');
-                console.error('儲存圖片順序時發生錯誤:', error);
-                let errorMessage = '儲存圖片順序時發生網路或伺服器錯誤。';
-                if (error && error.message) {
-                    errorMessage += `\n詳細資訊: ${error.message}`;
-                }
-                 // 為了確保 Arc 瀏覽器能顯示 alert，稍微延遲一下
-                setTimeout(() => {
-                    alert(errorMessage);
-                }, 100);
-            });
-        });
-    }
-
-    // --- 修正刪除按鈕 (適用於 Arc 瀏覽器) ---
-    // 選取所有 action 包含 "delete" 的表單
-    // document.querySelectorAll('form[action*="delete"]').forEach(deleteForm => {
-    //     // 先移除可能存在的內聯 onsubmit，避免重複執行或衝突
-    //     const originalOnSubmit = deleteForm.getAttribute('onsubmit');
-    //     if (originalOnSubmit) {
-    //         deleteForm.removeAttribute('onsubmit');
-    //     }
-
-    //     deleteForm.addEventListener('submit', function(event) {
-    //         event.preventDefault(); // 阻止表單的預設提交行為
-
-    //         let confirmMessage = '您確定要刪除嗎？'; // 預設確認訊息
-    //         // 嘗試從原始的 onsubmit 屬性中提取確認訊息
-    //         if (originalOnSubmit && originalOnSubmit.includes('confirm(')) {
-    //             try {
-    //                 const match = originalOnSubmit.match(/confirm\(['"](.*?)['"]\)/);
-    //                 if (match && match[1]) {
-    //                     confirmMessage = match[1];
-    //                 }
-    //             } catch (e) {
-    //                 console.warn('無法從原始 onsubmit 中解析確認訊息', e);
-    //             }
-    //         } else { // 如果沒有原始 onsubmit，根據 action 內容生成訊息
-    //             if (this.action.includes('delete_media_item')) {
-    //                 confirmMessage = '您確定要刪除這個媒體項目嗎？';
-    //             } else if (this.action.includes('delete_carousel_group')) {
-    //                 confirmMessage = '您確定要刪除這個輪播圖片組嗎？組本身會被刪除，但組內的圖片素材不會被刪除。';
-    //             }
-    //         }
-
-    //         if (window.confirm(confirmMessage)) { // 使用 window.confirm 確保是全局的 confirm
-    //             // 如果使用者確認，則實際提交表單
-    //             // 注意：這裡不能直接呼叫 this.submit() 後再 return false，因為我們已經 preventDefault 了
-    //             // 我們需要讓表單以其原始方式提交，或者如果後端設計為 AJAX，則發送 AJAX
-    //             // 由於我們的刪除是傳統 POST，所以直接提交
-    //             console.log(`使用者確認刪除，正在提交表單: ${this.action}`);
-    //             this.submit(); // 重新觸發表單提交，這次不會被我們的 listener 攔截第二次（因為我們沒有再次 preventDefault）
-    //         } else {
-    //             console.log('使用者取消了刪除操作。');
-    //             return false; // 雖然已經 preventDefault，但明確返回 false
-    //         }
-    //     });
-    // });
-
 });
