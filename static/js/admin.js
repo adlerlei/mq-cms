@@ -488,47 +488,47 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- 修正刪除按鈕 (適用於 Arc 瀏覽器) ---
     // 選取所有 action 包含 "delete" 的表單
-    document.querySelectorAll('form[action*="delete"]').forEach(deleteForm => {
-        // 先移除可能存在的內聯 onsubmit，避免重複執行或衝突
-        const originalOnSubmit = deleteForm.getAttribute('onsubmit');
-        if (originalOnSubmit) {
-            deleteForm.removeAttribute('onsubmit');
-        }
+    // document.querySelectorAll('form[action*="delete"]').forEach(deleteForm => {
+    //     // 先移除可能存在的內聯 onsubmit，避免重複執行或衝突
+    //     const originalOnSubmit = deleteForm.getAttribute('onsubmit');
+    //     if (originalOnSubmit) {
+    //         deleteForm.removeAttribute('onsubmit');
+    //     }
 
-        deleteForm.addEventListener('submit', function(event) {
-            event.preventDefault(); // 阻止表單的預設提交行為
+    //     deleteForm.addEventListener('submit', function(event) {
+    //         event.preventDefault(); // 阻止表單的預設提交行為
 
-            let confirmMessage = '您確定要刪除嗎？'; // 預設確認訊息
-            // 嘗試從原始的 onsubmit 屬性中提取確認訊息
-            if (originalOnSubmit && originalOnSubmit.includes('confirm(')) {
-                try {
-                    const match = originalOnSubmit.match(/confirm\(['"](.*?)['"]\)/);
-                    if (match && match[1]) {
-                        confirmMessage = match[1];
-                    }
-                } catch (e) {
-                    console.warn('無法從原始 onsubmit 中解析確認訊息', e);
-                }
-            } else { // 如果沒有原始 onsubmit，根據 action 內容生成訊息
-                if (this.action.includes('delete_media_item')) {
-                    confirmMessage = '您確定要刪除這個媒體項目嗎？';
-                } else if (this.action.includes('delete_carousel_group')) {
-                    confirmMessage = '您確定要刪除這個輪播圖片組嗎？組本身會被刪除，但組內的圖片素材不會被刪除。';
-                }
-            }
+    //         let confirmMessage = '您確定要刪除嗎？'; // 預設確認訊息
+    //         // 嘗試從原始的 onsubmit 屬性中提取確認訊息
+    //         if (originalOnSubmit && originalOnSubmit.includes('confirm(')) {
+    //             try {
+    //                 const match = originalOnSubmit.match(/confirm\(['"](.*?)['"]\)/);
+    //                 if (match && match[1]) {
+    //                     confirmMessage = match[1];
+    //                 }
+    //             } catch (e) {
+    //                 console.warn('無法從原始 onsubmit 中解析確認訊息', e);
+    //             }
+    //         } else { // 如果沒有原始 onsubmit，根據 action 內容生成訊息
+    //             if (this.action.includes('delete_media_item')) {
+    //                 confirmMessage = '您確定要刪除這個媒體項目嗎？';
+    //             } else if (this.action.includes('delete_carousel_group')) {
+    //                 confirmMessage = '您確定要刪除這個輪播圖片組嗎？組本身會被刪除，但組內的圖片素材不會被刪除。';
+    //             }
+    //         }
 
-            if (window.confirm(confirmMessage)) { // 使用 window.confirm 確保是全局的 confirm
-                // 如果使用者確認，則實際提交表單
-                // 注意：這裡不能直接呼叫 this.submit() 後再 return false，因為我們已經 preventDefault 了
-                // 我們需要讓表單以其原始方式提交，或者如果後端設計為 AJAX，則發送 AJAX
-                // 由於我們的刪除是傳統 POST，所以直接提交
-                console.log(`使用者確認刪除，正在提交表單: ${this.action}`);
-                this.submit(); // 重新觸發表單提交，這次不會被我們的 listener 攔截第二次（因為我們沒有再次 preventDefault）
-            } else {
-                console.log('使用者取消了刪除操作。');
-                return false; // 雖然已經 preventDefault，但明確返回 false
-            }
-        });
-    });
+    //         if (window.confirm(confirmMessage)) { // 使用 window.confirm 確保是全局的 confirm
+    //             // 如果使用者確認，則實際提交表單
+    //             // 注意：這裡不能直接呼叫 this.submit() 後再 return false，因為我們已經 preventDefault 了
+    //             // 我們需要讓表單以其原始方式提交，或者如果後端設計為 AJAX，則發送 AJAX
+    //             // 由於我們的刪除是傳統 POST，所以直接提交
+    //             console.log(`使用者確認刪除，正在提交表單: ${this.action}`);
+    //             this.submit(); // 重新觸發表單提交，這次不會被我們的 listener 攔截第二次（因為我們沒有再次 preventDefault）
+    //         } else {
+    //             console.log('使用者取消了刪除操作。');
+    //             return false; // 雖然已經 preventDefault，但明確返回 false
+    //         }
+    //     });
+    // });
 
 });

@@ -13,3 +13,5 @@ venv/
 static/uploads/
 .media.json
 media.json
+.vscode/
+settings.json
