@@ -123,12 +123,11 @@ def login_page():
     return render_template('login.html')
 
 @app.route('/admin')
-@token_required
-def admin_page(current_user): # 修改：加入 @token_required 和 current_user
+def admin_page(): # 移除了 @token_required 和 current_user
     media_items = load_media_data()
-    settings = load_playback_settings() # 修改：載入設定
-    # 修改：將設定傳遞給模板
-    return render_template('admin.html', media_items=media_items, available_sections=AVAILABLE_SECTIONS, settings=settings, username=current_user.username)
+    settings = load_playback_settings()
+    # 移除了 username=current_user.username
+    return render_template('admin.html', media_items=media_items, available_sections=AVAILABLE_SECTIONS, settings=settings)
 
 # --- 認證 API ---
 @app.route('/api/auth/login', methods=['POST'])
