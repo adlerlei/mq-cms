@@ -4,15 +4,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const fileInput = document.querySelector('.file-input');
     const fileNameDisplay = document.querySelector('.file-name');
 
-    if (fileInput && fileNameDisplay) {
-        fileInput.onchange = () => {
-            if (fileInput.files.length > 0) {
-                fileNameDisplay.textContent = fileInput.files[0].name;
-            } else {
-                fileNameDisplay.textContent = '未選擇任何檔案';
-            }
-        };
-    }
+    fileInput?.addEventListener('change', () => {
+        fileNameDisplay.textContent = fileInput.files.length > 0 ? fileInput.files[0].name : '未選擇任何檔案';
+    });
 
     // 上傳表單和進度條相關元素
     const uploadForm = document.getElementById('uploadForm');
@@ -21,7 +15,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const progressText = document.getElementById('upload-progress-text');
     const uploadFormSubmitButton = uploadForm ? uploadForm.querySelector('button[type="submit"]') : null;
 
-    if (uploadForm && progressBarContainer && progressBar && progressText && uploadFormSubmitButton) {
+    function resetUploadFormState(hideDelay = 0) {
+        uploadFormSubmitButton?.classList.remove('is-loading');
+        if (uploadFormSubmitButton) uploadFormSubmitButton.disabled = false;
+        if (hideDelay > 0) {
+            setTimeout(() => { if(progressBarContainer) progressBarContainer.style.display = 'none'; }, hideDelay);
+        } else if (progressBarContainer) {
+            progressBarContainer.style.display = 'none';
+        }
+    }
+
+    if (uploadForm) { // progressBarContainer, progressBar, progressText, uploadFormSubmitButton can be checked inside if needed
         uploadForm.addEventListener('submit', function(event) {
             if (!uploadForm.checkValidity()) {
                 console.warn('HTML5 表單驗證未通過 (uploadForm)。');
@@ -29,11 +33,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             event.preventDefault();
 
-            progressBarContainer.style.display = 'block';
-            progressBar.value = 0;
-            progressText.textContent = '0%';
-            uploadFormSubmitButton.classList.add('is-loading');
-            uploadFormSubmitButton.disabled = true;
+            if(progressBarContainer) progressBarContainer.style.display = 'block';
+            if(progressBar) progressBar.value = 0;
+            if(progressText) progressText.textContent = '0%';
+            uploadFormSubmitButton?.classList.add('is-loading');
+            if(uploadFormSubmitButton) uploadFormSubmitButton.disabled = true;
 
             const formData = new FormData(uploadForm);
             const xhr = new XMLHttpRequest();
@@ -41,16 +45,15 @@ document.addEventListener('DOMContentLoaded', () => {
             xhr.upload.addEventListener('progress', function(e) {
                 if (e.lengthComputable) {
                     const percentage = Math.round((e.loaded / e.total) * 100);
-                    progressBar.value = percentage;
-                    progressText.textContent = percentage + '%';
+                    if(progressBar) progressBar.value = percentage;
+                    if(progressText) progressText.textContent = percentage + '%';
                 }
             });
 
             xhr.addEventListener('load', function() {
-                progressBar.value = 100;
-                progressText.textContent = '100%';
-                uploadFormSubmitButton.classList.remove('is-loading');
-                uploadFormSubmitButton.disabled = false;
+                if(progressBar) progressBar.value = 100;
+                if(progressText) progressText.textContent = '100%';
+                resetUploadFormState();
 
                 if (xhr.status === 200 || xhr.status === 302) {
                     console.log('操作成功 (uploadForm)，正在重新載入頁面...');
@@ -58,29 +61,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     console.error('操作失敗 (uploadForm):', xhr.status, xhr.responseText);
                     alert(`操作失敗: ${xhr.status} - ${xhr.statusText || '未知錯誤'}`);
-                    setTimeout(() => {
-                        progressBarContainer.style.display = 'none';
-                    }, 2000);
+                    resetUploadFormState(2000);
                 }
             });
 
             xhr.addEventListener('error', function() {
                 console.error('上傳過程中發生網路錯誤。');
                 alert('上傳過程中發生網路錯誤，請檢查您的網路連線。');
-                uploadFormSubmitButton.classList.remove('is-loading');
-                uploadFormSubmitButton.disabled = false;
-                setTimeout(() => {
-                    progressBarContainer.style.display = 'none';
-                }, 2000);
+                resetUploadFormState(2000);
             });
 
             xhr.addEventListener('abort', function() {
                 console.warn('上傳已中止。');
-                uploadFormSubmitButton.classList.remove('is-loading');
-                uploadFormSubmitButton.disabled = false;
-                setTimeout(() => {
-                    progressBarContainer.style.display = 'none';
-                }, 1000);
+                resetUploadFormState(1000);
             });
 
             xhr.open('POST', uploadForm.action, true);
@@ -105,18 +98,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function closeModal() {
         if(editModal) editModal.classList.remove('is-active');
-        selectedImagesListDiv.innerHTML = '<p class="has-text-grey-light has-text-centered p-4">此群組尚無圖片</p>';
-        availableImagesListDiv.innerHTML = '';
-        modalGroupIdInput.value = '';
-        modalGroupName.textContent = '';
+        if(selectedImagesListDiv) selectedImagesListDiv.innerHTML = '<p class="has-text-grey-light has-text-centered p-4">此群組尚無圖片</p>';
+        if(availableImagesListDiv) availableImagesListDiv.innerHTML = '';
+        if(modalGroupIdInput) modalGroupIdInput.value = '';
+        if(modalGroupName) modalGroupName.textContent = '';
     }
 
     document.querySelectorAll('.edit-group-images-button').forEach(button => {
         button.addEventListener('click', function() {
             const groupId = this.dataset.groupId;
             const groupName = this.dataset.groupName;
-            modalGroupIdInput.value = groupId;
-            modalGroupName.textContent = groupName;
+            if(modalGroupIdInput) modalGroupIdInput.value = groupId;
+            if(modalGroupName) modalGroupName.textContent = groupName;
             populateAvailableImages(groupId);
             populateSelectedImages(groupId);
             openModal();
@@ -124,7 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function populateAvailableImages(currentGroupId) {
-        availableImagesListDiv.innerHTML = '';
+        if(availableImagesListDiv) availableImagesListDiv.innerHTML = '';
         const group = allMediaItemsForJS.find(item => item.id === currentGroupId && item.type === 'carousel_group');
         const selectedImageIdsInCurrentGroup = group ? group.image_ids || [] : [];
 
@@ -161,13 +154,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 entryDiv.appendChild(imgPreview);
                 entryDiv.appendChild(fileNameSpan);
                 entryDiv.appendChild(addButton);
-                availableImagesListDiv.appendChild(entryDiv);
+                availableImagesListDiv?.appendChild(entryDiv);
             });
-        } else {
+        } else if (availableImagesListDiv) {
             availableImagesListDiv.innerHTML = '<p class="has-text-grey-light has-text-centered p-4">沒有可用的圖片素材。</p>';
         }
     }
-
     function populateSelectedImages(groupId) {
         selectedImagesListDiv.innerHTML = '';
         const group = allMediaItemsForJS.find(item => item.id === groupId && item.type === 'carousel_group');
@@ -178,14 +170,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     addSelectedImageToDOM(imgSrc.id, imgSrc.url, imgSrc.filename);
                 }
             });
-        } else {
+        } else if (selectedImagesListDiv) {
             selectedImagesListDiv.innerHTML = '<p class="has-text-grey-light has-text-centered p-4">此群組尚無圖片</p>';
         }
     }
 
     function addSelectedImageToDOM(imageId, imageUrl, imageFilename) {
-        if (selectedImagesListDiv.querySelector(`[data-image-id="${imageId}"]`)) return;
-        if (selectedImagesListDiv.querySelector('p.has-text-grey-light')) {
+        if (selectedImagesListDiv?.querySelector(`[data-image-id="${imageId}"]`)) return;
+        if (selectedImagesListDiv?.querySelector('p.has-text-grey-light')) {
             selectedImagesListDiv.innerHTML = '';
         }
         const entryDiv = document.createElement('div');
@@ -216,20 +208,20 @@ document.addEventListener('DOMContentLoaded', () => {
         entryDiv.appendChild(imgPreview);
         entryDiv.appendChild(fileNameSpan);
         entryDiv.appendChild(removeButton);
-        selectedImagesListDiv.appendChild(entryDiv);
+        selectedImagesListDiv?.appendChild(entryDiv);
 
         entryDiv.addEventListener('dragstart', handleDragStart);
         entryDiv.addEventListener('dragend', handleDragEnd);
     }
 
-    selectedImagesListDiv.addEventListener('dragover', handleDragOver);
-    selectedImagesListDiv.addEventListener('drop', handleDrop);
-    selectedImagesListDiv.addEventListener('dragenter', handleDragEnter);
-    selectedImagesListDiv.addEventListener('dragleave', handleDragLeave);
+    selectedImagesListDiv?.addEventListener('dragover', handleDragOver);
+    selectedImagesListDiv?.addEventListener('drop', handleDrop);
+    selectedImagesListDiv?.addEventListener('dragenter', handleDragEnter);
+    selectedImagesListDiv?.addEventListener('dragleave', handleDragLeave);
 
     if(modalCloseButton) modalCloseButton.addEventListener('click', closeModal);
     if(cancelGroupChangesButton) cancelGroupChangesButton.addEventListener('click', closeModal);
-    if(modalBackground) modalBackground.addEventListener('click', closeModal);
+    if(modalBackground && editModal) modalBackground.addEventListener('click', closeModal); // Ensure editModal exists for modalBackground
 
     const mediaTypeSelect = document.getElementById('mediaTypeSelect');
     const sectionKeyField = document.getElementById('sectionKeyField');
@@ -242,7 +234,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const offsetInput = carouselOffsetField ? carouselOffsetField.querySelector('input[name="offset"]') : null;
 
     function toggleFormFields() {
-        const selectedType = mediaTypeSelect.value;
+        const selectedType = mediaTypeSelect?.value;
         if(sectionKeyField) sectionKeyField.style.display = 'none';
         if(fileUploadField) fileUploadField.style.display = 'none';
         if(carouselGroupField) carouselGroupField.style.display = 'none';
@@ -315,25 +307,20 @@ document.addEventListener('DOMContentLoaded', () => {
             placeholder.remove();
             placeholder = null;
         }
-        selectedImagesListDiv.classList.remove('drag-over-active');
+        selectedImagesListDiv?.classList.remove('drag-over-active');
     }
 
     function handleDragEnter(e) {
         e.preventDefault();
-        if (draggedItem && selectedImagesListDiv.contains(draggedItem)) {
-            selectedImagesListDiv.classList.add('drag-over-active');
+        if (draggedItem && selectedImagesListDiv?.contains(draggedItem)) {
+            selectedImagesListDiv?.classList.add('drag-over-active');
         }
     }
 
     function handleDragLeave(e) {
-        if (e.relatedTarget && !selectedImagesListDiv.contains(e.relatedTarget)) {
-            selectedImagesListDiv.classList.remove('drag-over-active');
-            if (placeholder) {
-                placeholder.remove();
-                placeholder = null;
-            }
-        } else if (!e.relatedTarget) {
-             selectedImagesListDiv.classList.remove('drag-over-active');
+        // If the mouse leaves the container and doesn't enter a child, or leaves the window
+        if (!e.currentTarget.contains(e.relatedTarget) ) {
+            selectedImagesListDiv?.classList.remove('drag-over-active');
             if (placeholder) {
                 placeholder.remove();
                 placeholder = null;
@@ -364,10 +351,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleDrop(e) {
         e.preventDefault();
-        if (!draggedItem || !selectedImagesListDiv.contains(draggedItem)) return;
-        if (placeholder && placeholder.parentNode === selectedImagesListDiv) {
+        if (!draggedItem || !selectedImagesListDiv?.contains(draggedItem)) return;
+        if (placeholder && placeholder.parentNode === selectedImagesListDiv && selectedImagesListDiv) {
             selectedImagesListDiv.insertBefore(draggedItem, placeholder);
-        } else if (draggedItem.parentNode === selectedImagesListDiv) {
+        } else if (draggedItem.parentNode === selectedImagesListDiv && selectedImagesListDiv) {
              selectedImagesListDiv.appendChild(draggedItem);
         }
         // 清理 placeholder，因為 dragend 可能在 drop 之後或之前觸發，取決於瀏覽器
@@ -375,13 +362,13 @@ document.addEventListener('DOMContentLoaded', () => {
             placeholder.remove();
             placeholder = null;
         }
-        selectedImagesListDiv.classList.remove('drag-over-active'); // 確保移除 active class
+        selectedImagesListDiv?.classList.remove('drag-over-active'); // 確保移除 active class
     }
 
     function getDragAfterElement(container, y) {
         const draggableElements = [...container.querySelectorAll('.draggable-item:not(.dragging)')];
         return draggableElements.reduce((closest, child) => {
-            const box = child.getBoundingClientRect();
+            const box = child.getBoundingClientRect(); // Potential error if child is not an element
             const offset = y - box.top - box.height / 2;
             if (offset < 0 && offset > closest.offset) {
                 return { offset: offset, element: child };
@@ -391,7 +378,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }, { offset: Number.NEGATIVE_INFINITY }).element;
     }
 
-    editModal.addEventListener('click', function(event) {
+    editModal?.addEventListener('click', function(event) {
         const target = event.target;
         if (target.classList.contains('add-image-to-group-button') && !target.disabled) {
             const imageId = target.dataset.imageId;
@@ -405,19 +392,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         else if (target.classList.contains('remove-image-from-group-button')) {
             const imageIdToRemove = target.dataset.imageId;
-            const itemToRemove = selectedImagesListDiv.querySelector(`.media-item-entry[data-image-id="${imageIdToRemove}"]`);
+            const itemToRemove = selectedImagesListDiv?.querySelector(`.media-item-entry[data-image-id="${imageIdToRemove}"]`);
             if (itemToRemove) {
                 itemToRemove.remove();
-                const correspondingAddButton = availableImagesListDiv.querySelector(`.add-image-to-group-button[data-image-id="${imageIdToRemove}"]`);
+                const correspondingAddButton = availableImagesListDiv?.querySelector(`.add-image-to-group-button[data-image-id="${imageIdToRemove}"]`);
                 if (correspondingAddButton) {
                     correspondingAddButton.disabled = false;
                     correspondingAddButton.textContent = '加入';
                     correspondingAddButton.classList.add('is-success');
                     correspondingAddButton.classList.remove('is-light');
                 }
-                if (selectedImagesListDiv.children.length === 0 ||
-                    (selectedImagesListDiv.children.length === 1 && selectedImagesListDiv.firstElementChild.tagName === 'P' && selectedImagesListDiv.firstElementChild.classList.contains('has-text-grey-light'))) {
-                     selectedImagesListDiv.innerHTML = '<p class="has-text-grey-light has-text-centered p-4">此群組尚無圖片</p>';
+                if (selectedImagesListDiv && (selectedImagesListDiv.children.length === 0 ||
+                    (selectedImagesListDiv.children.length === 1 && selectedImagesListDiv.firstElementChild?.tagName === 'P' && selectedImagesListDiv.firstElementChild.classList.contains('has-text-grey-light')))) {
+                     selectedImagesListDiv.innerHTML = '<p class="has-text-grey-light has-text-centered p-4">此群組尚無圖片</p>'; // Potential error if firstElementChild is null
                 }
             }
         }
@@ -426,13 +413,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (saveGroupChangesButton) {
         saveGroupChangesButton.addEventListener('click', function() {
             const groupId = modalGroupIdInput.value;
-            const selectedImageElements = selectedImagesListDiv.querySelectorAll('.media-item-entry.draggable-item');
+            const selectedImageElements = selectedImagesListDiv?.querySelectorAll('.media-item-entry.draggable-item') || [];
             const imageIdsInOrder = Array.from(selectedImageElements).map(el => el.dataset.imageId);
 
             console.log('要儲存的群組 ID:', groupId);
             console.log('圖片順序:', imageIdsInOrder);
 
-            saveGroupChangesButton.classList.add('is-loading');
+            this.classList.add('is-loading');
 
             fetch(`/admin/carousel_group/update_images/${groupId}`, {
                 method: 'POST',
@@ -448,7 +435,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return response.json();
             })
             .then(data => {
-                saveGroupChangesButton.classList.remove('is-loading');
+                this.classList.remove('is-loading');
                 if (data.success) {
                     console.log('輪播組圖片順序已更新:', data.message);
                     const groupIndex = allMediaItemsForJS.findIndex(item => item.id === groupId && item.type === 'carousel_group');
@@ -472,7 +459,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             })
             .catch(error => {
-                saveGroupChangesButton.classList.remove('is-loading');
+                this.classList.remove('is-loading');
                 console.error('儲存圖片順序時發生錯誤:', error);
                 let errorMessage = '儲存圖片順序時發生網路或伺服器錯誤。';
                 if (error && error.message) {
