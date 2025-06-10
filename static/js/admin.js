@@ -636,7 +636,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const form = event.target;
             const url = form.action;
-            const token = localStorage.getItem('accessToken'); // 從瀏覽器儲存中獲取 Token
+            const token = localStorage.getItem('jwt_token'); // 從瀏覽器儲存中獲取 Token
 
             // 2. 檢查 Token 是否存在
             if (!token) {
