@@ -13,6 +13,7 @@ import datetime
 import os
 import json
 import uuid
+import stat
 
 # --- 應用程式與資料庫設定 ---
 app = Flask(__name__)
@@ -49,6 +50,7 @@ DEFAULT_PLAYBACK_SETTINGS = {
 
 # --- 使用者資料模型 ---
 class User(db.Model):
+    """使用者資料模型"""
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
@@ -57,10 +59,15 @@ class User(db.Model):
 
 # --- 輔助函式 ---
 def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    """檢查檔案副檔名是否在允許的列表中"""
+    if '.' not in filename:
+        return False
+    extension = filename.rsplit('.', 1)[1].lower()
+    return extension in ALLOWED_EXTENSIONS
 
 def load_media_data():
     if not os.path.exists(MEDIA_FILE) or os.path.getsize(MEDIA_FILE) == 0: return []
+    """從 media.json 載入媒體資料"""
     try:
         with open(MEDIA_FILE, 'r', encoding='utf-8') as f: return json.load(f)
     except Exception as e:
@@ -68,10 +75,12 @@ def load_media_data():
 
 def save_media_data(data):
     try:
+        """將媒體資料儲存到 media.json"""
         with open(MEDIA_FILE, 'w', encoding='utf-8') as f: json.dump(data, f, indent=2, ensure_ascii=False)
     except IOError as e: print(f"儲存 media.json 錯誤: {e}")
 
 def load_playback_settings():
+    """從 settings.json 載入播放設定，如果檔案不存在或為空，則使用預設設定"""
     if not os.path.exists(SETTINGS_FILE) or os.path.getsize(SETTINGS_FILE) == 0:
         return DEFAULT_PLAYBACK_SETTINGS.copy()
     try:
@@ -84,6 +93,7 @@ def load_playback_settings():
         print(f"讀取 settings.json 錯誤: {e}"); return DEFAULT_PLAYBACK_SETTINGS.copy()
 
 def save_playback_settings(settings_data):
+    """將播放設定儲存到 settings.json"""
     try:
         settings_to_save = DEFAULT_PLAYBACK_SETTINGS.copy()
         settings_to_save.update(settings_data)
@@ -94,6 +104,7 @@ def save_playback_settings(settings_data):
 
 # --- JWT 認證裝飾器 ---
 def token_required(f):
+    """JWT 認證裝飾器，用於保護需要登入才能存取的路由"""
     @wraps(f)
     def decorated(*args, **kwargs):
         token = None
@@ -113,13 +124,18 @@ def token_required(f):
 
 # --- 頁面渲染路由 ---
 @app.route('/')
-def index_page(): return render_template('index.html')
+def index_page():
+    """渲染首頁"""
+    return render_template('index.html')
 
 @app.route('/login')
-def login_page(): return render_template('login.html')
+def login_page():
+    """渲染登���頁面"""
+    return render_template('login.html')
 
 @app.route('/admin')
 def admin_page():
+    """渲染管理員頁面，載入媒體資料和設定"""
     media_items = load_media_data()
     settings = load_playback_settings()
     return render_template('admin.html', media_items=media_items, available_sections=AVAILABLE_SECTIONS, settings=settings)
@@ -127,6 +143,7 @@ def admin_page():
 # --- 認證 API ---
 @app.route('/api/auth/login', methods=['POST'])
 def login():
+    """處理使用者登入請求，驗證帳號密碼並發放 JWT"""
     auth = request.json
     if not auth or not auth.get('username') or not auth.get('password'):
         return jsonify({'message': 'Could not verify'}), 401
@@ -140,47 +157,117 @@ def login():
 @app.route('/admin/add', methods=['POST'])
 @token_required
 def add_media_item(current_user):
-    media_type_action = request.form.get('type')
-    section_key_from_form = request.form.get('section_key')
-    media_items_db = load_media_data()
-    final_list_to_save = list(media_items_db)
-    new_item_object = None
+    """處理新增媒體項目或輪播群組指派的請求"""
+    try:
+        media_type_action = request.form.get('type')
+        section_key_from_form = request.form.get('section_key')
+        media_items_db = load_media_data()
+        final_list_to_save = list(media_items_db)
+        new_item_object = None
 
-    if media_type_action in ['image', 'video']:
-        if 'file' not in request.files or request.files['file'].filename == '': return redirect(url_for('admin_page'))
-        file = request.files['file']
-        if file and allowed_file(file.filename) and section_key_from_form:
-            original_filename = secure_filename(file.filename)
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], original_filename)
-            file.save(filepath)
+        if media_type_action in ['image', 'video']:
+            if 'file' not in request.files:
+                return jsonify({'message': '未找到上傳的檔案'}), 400
+                
+            file = request.files['file']
+            if file.filename == '':
+                return jsonify({'message': '未選擇檔案'}), 400
+
+            # 檢查檔案名稱格式
+            if not file.filename or file.filename == '':
+                return jsonify({'message': '檔案名稱不能為空'}), 400
+            
+            # 檢查是否有副檔名
+            if '.' not in file.filename:
+                return jsonify({'message': '檔案必須包含副檔名'}), 400
+            
+            # 使用 secure_filename 清理檔案名，但保留原始檔名作為備用
+            original_filename = file.filename
+            secure_name = secure_filename(file.filename)
+            
+            # 如果 secure_filename 清空了檔案名（通常是因為特殊字符），使用原始檔名的副檔名
+            if not secure_name or '.' not in secure_name:
+                file_extension = original_filename.rsplit('.', 1)[1].lower()
+                secure_name = f"upload.{file_extension}"
+
+            if not allowed_file(original_filename):
+                allowed_types = ", ".join(ALLOWED_EXTENSIONS)
+                return jsonify({'message': f'不支援的檔案類型。允許的類型：{allowed_types}'}), 400
+
             new_material_id = str(uuid.uuid4())
-            new_material_item = {"id": new_material_id, "filename": original_filename, "type": media_type_action, "url": f"/{UPLOAD_FOLDER}/{original_filename}"}
+            file_extension = original_filename.rsplit('.', 1)[1].lower()
+            unique_filename = f"{new_material_id}.{file_extension}"
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+            
+            # 確保上傳目錄存在並設置正確權限
+            os.makedirs(app.config['UPLOAD_FOLDER'], mode=0o755, exist_ok=True)
+            
+            # 調試信息：檢查目錄權限
+            dir_stat = os.stat(app.config['UPLOAD_FOLDER'])
+            print(f"Upload directory permissions: {oct(dir_stat.st_mode)}")
+            print(f"Upload directory owner: {dir_stat.st_uid}")
+            print(f"Current process user: {os.getuid()}")
+            print(f"Attempting to save file to: {filepath}")
+            
+            # 儲存檔案
+            file.save(filepath)
+            print(f"File saved successfully to: {filepath}")
+            
+            new_material_item = {
+                "id": new_material_id,
+                "original_filename": original_filename,
+                "filename": unique_filename,
+                "type": media_type_action,
+                "url": f"/{UPLOAD_FOLDER}/{unique_filename}"
+            }
             final_list_to_save.append(new_material_item)
-            new_item_object = {"id": str(uuid.uuid4()), "type": "section_assignment", "section_key": section_key_from_form, "content_source_type": "single_media", "media_id": new_material_id}
-    elif media_type_action == 'carousel_reference':
-        group_id_referenced = request.form.get('carousel_group_id')
-        offset = int(request.form.get('offset', '0'))
-        if section_key_from_form and group_id_referenced:
-            final_list_to_save = [item for item in media_items_db if not (item.get('type') == 'section_assignment' and item.get('section_key') == section_key_from_form)]
-            new_item_object = {"id": str(uuid.uuid4()), "type": "section_assignment", "section_key": section_key_from_form, "content_source_type": "group_reference", "group_id": group_id_referenced, "offset": offset}
-    
-    if new_item_object:
-        final_list_to_save.append(new_item_object)
-        save_media_data(final_list_to_save)
-        socketio.emit('media_updated', {'message': '操作完成!'})
-    return redirect(url_for('admin_page'))
 
-# @app.route('/admin/delete/<item_id_to_delete>', methods=['POST'])
-# @token_required
-# def delete_media_item(current_user, item_id_to_delete):
-#     media_items = load_media_data()
-#     final_list = [item for item in media_items if item.get('id') != item_id_to_delete]
-#     save_media_data(final_list)
-#     socketio.emit('media_updated', {'message': '項目已刪除!'})
-#     return redirect(url_for('admin_page'))
+            if section_key_from_form:
+                new_item_object = {
+                    "id": str(uuid.uuid4()),
+                    "type": "section_assignment",
+                    "section_key": section_key_from_form,
+                    "content_source_type": "single_media",
+                    "media_id": new_material_id
+                }
+                
+        elif media_type_action == 'carousel_reference':
+            group_id_referenced = request.form.get('carousel_group_id')
+            offset = int(request.form.get('offset', '0'))
+            if section_key_from_form and group_id_referenced:
+                final_list_to_save = [item for item in media_items_db if not (
+                    item.get('type') == 'section_assignment' and 
+                    item.get('section_key') == section_key_from_form
+                )]
+                new_item_object = {
+                    "id": str(uuid.uuid4()),
+                    "type": "section_assignment",
+                    "section_key": section_key_from_form,
+                    "content_source_type": "group_reference",
+                    "group_id": group_id_referenced,
+                    "offset": offset
+                }
+        
+        # If only a material was created (no direct assignment from the form)
+        if new_item_object is None and media_type_action in ['image', 'video']:
+            save_media_data(final_list_to_save)  # Save the material
+            socketio.emit('media_updated', {'message': '素材已新增!'})
+        elif new_item_object:  # If an assignment was created
+            final_list_to_save.append(new_item_object)
+            save_media_data(final_list_to_save)
+            socketio.emit('media_updated', {'message': '操作完成!'})
+        
+        return redirect(url_for('admin_page'))
+        
+    except Exception as e:
+        print(f"處理請求時發生錯誤: {str(e)}")
+        return jsonify({'message': f'處理請求時發生錯誤: {str(e)}'}), 500
+
+
 @app.route('/admin/delete/<item_id_to_delete>', methods=['POST'])
 @token_required
 def delete_media_item(current_user, item_id_to_delete):
+    """處理刪除媒體項目或輪播群組指派的請求，並刪除相關的實體檔案"""
     media_items = load_media_data()
     item_to_delete = None
     
@@ -192,7 +279,7 @@ def delete_media_item(current_user, item_id_to_delete):
 
     # 如果找到了要刪除的項目，並且它是'image'或'video'類型的素材
     if item_to_delete and item_to_delete.get('type') in ['image', 'video']:
-        filename = item_to_delete.get('filename')
+        filename = item_to_delete.get('filename') # This should now be the unique filename
         if filename:
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             try:
@@ -214,6 +301,11 @@ def delete_media_item(current_user, item_id_to_delete):
             item for item in final_list 
             if not (item.get('type') == 'section_assignment' and item.get('media_id') == material_id)
         ]
+        # Also remove the material from any carousel groups it was part of
+        for item in final_list:
+            if item.get('type') == 'carousel_group' and 'image_ids' in item:
+                item['image_ids'] = [img_id for img_id in item['image_ids'] if img_id != material_id]
+
 
     save_media_data(final_list)
     socketio.emit('media_updated', {'message': '項目已刪除!'})
@@ -223,6 +315,7 @@ def delete_media_item(current_user, item_id_to_delete):
 @app.route('/admin/settings/update', methods=['POST'])
 @token_required
 def update_global_settings(current_user):
+    """處理更新全域播放設定的請求"""
     data = request.json
     try:
         new_settings = {
@@ -239,6 +332,7 @@ def update_global_settings(current_user):
 @app.route('/admin/carousel_group/create', methods=['POST'])
 @token_required
 def create_carousel_group(current_user):
+    """處理建立新的輪播群組的請求"""
     group_name = request.form.get('group_name')
     if not group_name: return redirect(url_for('admin_page'))
     media_items = load_media_data()
@@ -251,6 +345,7 @@ def create_carousel_group(current_user):
 @app.route('/admin/carousel_group/delete/<group_id_to_delete>', methods=['POST'])
 @token_required
 def delete_carousel_group(current_user, group_id_to_delete):
+    """處理刪除輪播群組的請求，同時移除所有引用該群組的指派"""
     media_items = load_media_data()
     final_list = [item for item in media_items if item.get('id') != group_id_to_delete and item.get('group_id') != group_id_to_delete]
     if len(final_list) < len(media_items):
@@ -261,6 +356,7 @@ def delete_carousel_group(current_user, group_id_to_delete):
 @app.route('/admin/carousel_group/update_images/<group_id>', methods=['POST'])
 @token_required
 def update_carousel_group_images(current_user, group_id):
+    """處理更新輪播群組中圖片順序的請求"""
     data = request.get_json()
     if not data or 'image_ids' not in data: return jsonify({'success': False, 'message': '請求無效'}), 400
     media_items = load_media_data()
@@ -279,6 +375,7 @@ def update_carousel_group_images(current_user, group_id):
 # --- 公開 API ---
 @app.route('/api/media_with_settings', methods=['GET'])
 def get_media_with_settings():
+    """提供給前端的 API，返回所有媒體資料和播放設定，並處理輪播群組的偏移"""
     media_items_db = load_media_data()
     settings = load_playback_settings()
     materials = {item['id']: item for item in media_items_db if item.get('type') in ['image', 'video']}
@@ -322,18 +419,28 @@ def get_media_with_settings():
     for section_key, content_list in section_content_map.items():
         processed_media_for_frontend.extend(content_list)
         
-    return jsonify({"media": processed_media_for_frontend, "settings": settings})
+    # Also include all raw materials and groups for admin page if needed elsewhere, or specific admin API
+    all_materials = [item for item in media_items_db if item.get('type') in ['image', 'video']]
+    all_groups = [item for item in media_items_db if item.get('type') == 'carousel_group']
+
+    return jsonify({"media": processed_media_for_frontend, 
+                    "settings": settings, 
+                    "_debug_all_materials": all_materials, "_debug_all_groups": all_groups})
 
 # --- WebSocket ---
 @socketio.on('connect', namespace='/')
-def handle_connect(): print('一個客戶端已連接')
+def handle_connect():
+    """處理 WebSocket 連接事件"""
+    print('一個客戶端已連接')
 @socketio.on('disconnect', namespace='/')
-def handle_disconnect(): print('一個客戶端已斷開')
+def handle_disconnect():
+    """處理 WebSocket 斷開連接事件"""
+    print('一個客戶端已斷開')
 
 # --- 主程式啟動 ---
 if __name__ == '__main__':
     with app.app_context():
-        if not os.path.exists(UPLOAD_FOLDER): os.makedirs(UPLOAD_FOLDER)
+        if not os.path.exists(UPLOAD_FOLDER): os.makedirs(UPLOAD_FOLDER, mode=0o755)
         if not os.path.exists(MEDIA_FILE) or os.path.getsize(MEDIA_FILE) == 0: save_media_data([])
         if not os.path.exists(SETTINGS_FILE) or os.path.getsize(SETTINGS_FILE) == 0: save_playback_settings({})
         db.create_all()

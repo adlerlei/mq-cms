@@ -6,6 +6,7 @@ import os
 DB_FILE = "users.db"
 
 def init_db():
+    """初始化資料庫，建立資料表並建立預設 admin 使用者（如果不存在）。"""
     # 刪除舊的資料庫檔案（可選，用於完全重置）
     if os.path.exists(DB_FILE):
         print(f"找到舊的資料庫檔案 {DB_FILE}，將其刪除...")
