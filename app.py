@@ -170,14 +170,55 @@ def add_media_item(current_user):
         socketio.emit('media_updated', {'message': '操作完成!'})
     return redirect(url_for('admin_page'))
 
+# @app.route('/admin/delete/<item_id_to_delete>', methods=['POST'])
+# @token_required
+# def delete_media_item(current_user, item_id_to_delete):
+#     media_items = load_media_data()
+#     final_list = [item for item in media_items if item.get('id') != item_id_to_delete]
+#     save_media_data(final_list)
+#     socketio.emit('media_updated', {'message': '項目已刪除!'})
+#     return redirect(url_for('admin_page'))
 @app.route('/admin/delete/<item_id_to_delete>', methods=['POST'])
 @token_required
 def delete_media_item(current_user, item_id_to_delete):
     media_items = load_media_data()
+    item_to_delete = None
+    
+    # 在過濾前，先找到要被刪除的項目
+    for item in media_items:
+        if item.get('id') == item_id_to_delete:
+            item_to_delete = item
+            break
+
+    # 如果找到了要刪除的項目，並且它是'image'或'video'類型的素材
+    if item_to_delete and item_to_delete.get('type') in ['image', 'video']:
+        filename = item_to_delete.get('filename')
+        if filename:
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            try:
+                # 檢查檔案是否存在，然後刪除它
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+                    print(f"已成功刪除實體檔案: {filepath}")
+            except OSError as e:
+                print(f"刪除檔案時發生錯誤 {filepath}: {e}")
+
+    # 從列表中移除該項目的 JSON 記錄 (無論是素材還是指派)
     final_list = [item for item in media_items if item.get('id') != item_id_to_delete]
+    
+    # 檢查是否有任何指派正在使用即將被刪除的素材
+    if item_to_delete and item_to_delete.get('type') in ['image', 'video']:
+        material_id = item_to_delete.get('id')
+        # 從列表中也移除引用了此素材的 'section_assignment'
+        final_list = [
+            item for item in final_list 
+            if not (item.get('type') == 'section_assignment' and item.get('media_id') == material_id)
+        ]
+
     save_media_data(final_list)
     socketio.emit('media_updated', {'message': '項目已刪除!'})
-    return redirect(url_for('admin_page'))
+    # 刪除後返回 JSON 響應，讓前端 JS 處理刷新，這是更好的 API 設計
+    return jsonify({'success': True, 'message': '刪除成功'})
 
 @app.route('/admin/settings/update', methods=['POST'])
 @token_required
