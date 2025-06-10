@@ -28,10 +28,10 @@
     <section class="section">
         <div class="container">
             <div class="box mt-5">
-                <h2 class="title is-4">新增媒體/指派內容</h2>
+                <h2 class="title is-4">新增媒體 / 指派內容</h2>
                 <form id="uploadForm" action="{{ url_for('add_media_item') }}" method="POST" enctype="multipart/form-data">
                     <div class="field"><label class="label">操作類型</label><div class="control"><div class="select is-fullwidth"><select name="type" id="mediaTypeSelect" required><option value="image">上傳圖片並指派</option><option value="video">上傳影片並指派</option><option value="carousel_reference">指派輪播組</option></select></div></div></div>
-                    <div id="sectionKeyField" class="field" style="display: none;"><label class="label">指定區塊</label><div class="control"><div class="select is-fullwidth"><select name="section_key" id="sectionKeySelect"></select></div></div></div>
+                    <div id="sectionKeyField" class="field" style="display: none;"><label class="label">指派到區塊</label><div class="control"><div class="select is-fullwidth"><select name="section_key" id="sectionKeySelect"></select></div></div></div>
                     <div id="fileUploadField" class="field">
                         <label class="label">選擇檔案</label>
                         <div class="control">
@@ -120,7 +120,7 @@
                                         <span>輪播組: {{ grp.name if grp else '群組遺失' }}</span>
                                     {% endif %}
                                 </td>
-                                <td><span class="tag is-primary is-light">{{ '直接指派' if item.content_source_type == 'single_media' else '輪播組指派' }}</span></td>
+                                <td><span class="tag is-primary is-light">{{ '直接指派' if item.content_source_type == 'single_media' else '輪播���指派' }}</span></td>
                                 <td>{{ available_sections.get(item.section_key, '未知區塊') }}</td>
                                 <td class="actions-cell has-text-right">
                                     
@@ -190,10 +190,33 @@
             <footer class="modal-card-foot"><button id="saveGroupChangesButton" class="button is-success">儲存變更</button><button class="button" id="cancelGroupChangesButton">取消</button></footer>
         </div>
     </div>
+    
+    <!-- Socket.IO 客户端库 -->
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script>
         const allMediaItemsForJS = {{ media_items | tojson }};
         const availableImageSources = allMediaItemsForJS.filter(item => item.type === 'image');
         const available_sections_for_js = {{ available_sections | tojson }};
+        
+        // 初始化 Socket.IO 连接
+        const socket = io();
+        
+        socket.on('connect', () => {
+            console.log('成功連接到 WebSocket 伺服器');
+        });
+        
+        socket.on('disconnect', (reason) => {
+            console.log('WebSocket 連接斷開:', reason);
+        });
+        
+        socket.on('media_updated', (data) => {
+            console.log('媒體更新:', data.message);
+            // 可以在这里添加通知或自动刷新逻辑
+        });
+        
+        socket.on('settings_updated', (data) => {
+            console.log('設定已更新:', data);
+        });
     </script>
     <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
 </body>

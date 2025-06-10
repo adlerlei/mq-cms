@@ -1,4 +1,4 @@
-const SERVER_BASE_URL = 'http://59.124.31.142:5000'; // 確保這是您正確的伺服器 URL
+const SERVER_BASE_URL = window.location.origin; // 自动使用当前页面的协议和主机
 
 // 全局設定的預設值，如果從後端獲取失敗則使用這些
 const DEFAULT_INTERVALS = {
@@ -274,7 +274,7 @@ function updateCarousel(mediaItems, sectionKey, carouselInnerId, carouselInterva
       const itemWrapper = document.createElement('figure'); // 使用 figure
       itemWrapper.classList.add('carousel-item');
 
-      // 中間區塊仍然使用 .carousel-image-container 來包裹 img 以控制比例
+      // 中間區塊仍然使��� .carousel-image-container 來包裹 img 以控制比例
       const imageContainer = document.createElement('div');
       imageContainer.classList.add('carousel-image-container'); // 保持這個結構
 
@@ -301,20 +301,24 @@ function updateCarousel(mediaItems, sectionKey, carouselInnerId, carouselInterva
 
 // WebSocket 初始化
 function initializeWebSocket() {
-  const socket = io(SERVER_BASE_URL, {
+  const socket = io({
     transports: ['websocket', 'polling']
   });
+  
   socket.on('connect', () => console.log('成功連接到 WebSocket 伺服器 (Socket.IO)'));
+  
   socket.on('disconnect', (reason) => {
     console.log(`與 WebSocket 伺服器斷開連線: ${reason}`);
     if (reason === 'io server disconnect') socket.connect();
   });
+  
   socket.on('connect_error', (error) => console.error('WebSocket 連線錯誤:', error));
 
   socket.on('media_updated', (data) => {
     console.log('收到 "media_updated" 事件:', data.message || data);
     fetchMediaData().then(updateAllSections);
   });
+  
   socket.on('settings_updated', (settings_data) => {
     console.log('收到 "settings_updated" 事件:', settings_data);
     fetchMediaData().then(updateAllSections);
