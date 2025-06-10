@@ -621,3 +621,55 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleFormFields();
     }
 });
+
+// --- 請將以下程式碼新增到 admin.js 的最末端 ---
+
+document.addEventListener('DOMContentLoaded', () => {
+    // 監聽整個頁面的表單提交事件
+    document.body.addEventListener('submit', function(event) {
+        
+        // 判斷被提交的是否為我們標記的刪除表單
+        if (event.target && event.target.matches('form.delete-form')) {
+            
+            // 1. 阻止表單用傳統方式送出
+            event.preventDefault(); 
+
+            const form = event.target;
+            const url = form.action;
+            const token = localStorage.getItem('accessToken'); // 從瀏覽器儲存中獲取 Token
+
+            // 2. 檢查 Token 是否存在
+            if (!token) {
+                alert('認證已過期或不存在，請重新登入。');
+                window.location.href = '/login'; // 重定向到登入頁面
+                return;
+            }
+
+            // 3. 使用 fetch API 發送帶有認證標頭的請求
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    // 這就是解決問題的關鍵：在請求中加入認證 Token
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+            .then(response => {
+                if (response.ok) {
+                    // 如果伺服器回應成功 (status 200-299)
+                    console.log('刪除成功！');
+                    window.location.reload(); // 重新整理頁面以顯示最新列表
+                } else {
+                    // 如果伺服器回應失敗
+                    response.json().then(data => {
+                        alert(`刪除失敗: ${data.message || '未知錯誤'}`);
+                    });
+                }
+            })
+            .catch(error => {
+                // 處理網絡連線等問題
+                console.error('刪除操作時發生網絡錯誤:', error);
+                alert('刪除失敗，請檢查網絡連線或查看控制台日誌。');
+            });
+        }
+    });
+});
