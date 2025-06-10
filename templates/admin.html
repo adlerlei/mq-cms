@@ -112,7 +112,8 @@
                                 <td><span class="tag is-primary is-light">{{ '直接指派' if item.content_source_type == 'single_media' else '輪播組指派' }}</span></td>
                                 <td>{{ available_sections.get(item.section_key, '未知區塊') }}</td>
                                 <td class="actions-cell has-text-right">
-                                    <form class="delete-form" action="{{ url_for('delete_media_item', item_id_to_delete=item.id) }}" method="POST" onsubmit="return confirm('確定刪除此指派?');"></form>
+                                    
+                                    <form class="delete-form" action="{{ url_for('delete_media_item', item_id_to_delete=item.id) }}" method="POST" onsubmit="return confirm('確定刪除此指派?');"><button type="submit" class="button is-small is-danger">刪除指派</button></form>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -127,7 +128,7 @@
                                 <td><span class="tag is-info is-light">{{ '圖片素材' if item.type == 'image' else '影片素材' }}</span></td>
                                 <td><span class="is-italic">在庫，未指派</span></td>
                                 <td class="actions-cell has-text-right">
-                                    <form class="delete-form" action="{{ url_for('delete_media_item', item_id_to_delete=item.id) }}" method="POST" onsubmit="return confirm('確定刪除此素材?');">
+                                    <form class="delete-form" action="{{ url_for('delete_media_item', item_id_to_delete=item.id) }}" method="POST" onsubmit="return confirm('確定刪除此素材?');"><button type="submit" class="button is-small is-danger">刪除素材</button></form>
                                 </td>
                             </tr>
                             {% endif %}{% endfor %}
@@ -156,7 +157,7 @@
                                 <td>{{ item.name }}</td><td>{{ item.image_ids | length }}</td>
                                 <td class="actions-cell has-text-right">
                                     <button class="button is-small is-link edit-group-images-button" data-group-id="{{ item.id }}" data-group-name="{{ item.name }}">編輯圖片</button>
-                                    <form class="delete-form" action="{{ url_for('delete_carousel_group', group_id_to_delete=item.id) }}" method="POST" onsubmit="return confirm('您確定要刪除這個輪播圖片組嗎？組本身會被刪除，引用此組的區塊指派也會被移除，但組內的圖片素材不會被刪除。');"></form>
+                                    <form class="delete-form" action="{{ url_for('delete_carousel_group', group_id_to_delete=item.id) }}" method="POST" onsubmit="return confirm('您確定要刪除這個輪播圖片組嗎？組本身會被刪除，引用此組的區塊指派也會被移除，但組內的圖片素材不會被刪除。');"><button type="submit" class="button is-small is-danger">刪除</button></form>
                                 </td>
                             </tr>
                             {% endfor %}
