@@ -9,6 +9,7 @@
         body {
             overflow: -moz-scrollbars-none;
             -ms-overflow-style: none;
+            background-color: #000;
         }
         
         body::-webkit-scrollbar {
@@ -24,6 +25,8 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            background-color: #000;
+            margin-bottom: 0;
         }
         
         #header-content-container .carousel-container {
@@ -44,6 +47,8 @@
             width: 1080px;
             display: flex;
             flex-direction: column;
+            margin-top: 0;
+            margin-bottom: 0;
         }
         
         .grid-row {
