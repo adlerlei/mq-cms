@@ -10,6 +10,9 @@
             overflow: -moz-scrollbars-none;
             -ms-overflow-style: none;
             background-color: #000;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
         
         body::-webkit-scrollbar {
@@ -19,7 +22,8 @@
         /* 頁首影片容器樣式 */
         #header-content-container {
             width: 1080px;
-            max-height: 1920px;
+            flex: 1;
+            min-height: 0;
             overflow: hidden;
             position: relative;
             display: flex;
@@ -31,15 +35,13 @@
         
         #header-content-container .carousel-container {
             width: 100%;
-            height: auto;
-            max-height: 1920px;
+            height: 100%;
         }
         
         #header-content-container video {
             width: 100%;
-            height: auto;
-            max-height: 1920px;
-            object-fit: contain;
+            height: 100%;
+            object-fit: cover;
         }
      
         /* 中間四個區塊的網格佈局 */
@@ -92,8 +94,28 @@
             object-fit: cover;
         }
         
+        /* 頁尾影片容器樣式 */
+        #footer-content-container {
+            width: 1080px;
+            height: 192px;
+            overflow: hidden;
+            position: relative;
+            background-color: #000;
+        }
+        
+        #footer-content-container .carousel-container {
+            width: 100%;
+            height: 100%;
+        }
+        
+        #footer-content-container video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
         .footer-video {
             width: 1080px;
-            height: 280px;
+            height: 192px;
             object-fit: cover;
         }
