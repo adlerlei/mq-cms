@@ -1,45 +1,45 @@
 <!doctype html>
 <html lang="zh-TW">
-  <head>
+<head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Git-Bulma</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/bulma.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
-  </head>
-
-  <body>
-    <div id="header-content-container" class="column is-full p-0">
-      <figure class="image is-16by9">
-        <video id="header-video-player" class="has-ratio" width="1920" height="1080" autoplay loop muted playsinline>
-          您的瀏覽器不支持 HTML5 視頻
-        </video>
-      </figure>
+    <!-- 引入 flask index.css -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}" />
+    <title>Git-Custom</title>
+</head>
+<body>
+    <div id="header-content-container">
+        <!-- 內容由 JavaScript 動態載入 -->
     </div>
-    <div class="columns is-gapless is-mobile mb-0">
-      <div class="column carousel-container">
-        <div id="carousel-top-left-inner" class="carousel-inner">
-          </div>
-      </div>
-      	<div class="column carousel-container">
-        <div id="carousel-top-right-inner" class="carousel-inner">
-          </div>
-      </div>
-    </div>
-    <div class="columns is-gapless is-mobile mb-0">
-      <div class="column carousel-container">
-        <div id="carousel-bottom-left-inner" class="carousel-inner">
-          </div>
-      </div>
-      	<div class="column carousel-container">
-        <div id="carousel-bottom-right-inner" class="carousel-inner">
-          </div>
-      </div>
-    </div>
-    <div id="footer-content-container" class="p-0">
+    
+    <div class="middle-grid">
+        <div class="grid-row">
+            <div class="carousel-container">
+                <div id="carousel-top-left-inner" class="carousel-inner">
+                </div>
+            </div>
+            <div class="carousel-container">
+                <div id="carousel-top-right-inner" class="carousel-inner">
+                </div>
+            </div>
         </div>
-
+        
+        <div class="grid-row">
+            <div class="carousel-container">
+                <div id="carousel-bottom-left-inner" class="carousel-inner">
+                </div>
+            </div>
+            <div class="carousel-container">
+                <div id="carousel-bottom-right-inner" class="carousel-inner">
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="footer-content-container">
+    </div>
+    
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="{{ url_for('static', filename='js/animation.js') }}"></script>
-  </body>
+</body>
 </html>
