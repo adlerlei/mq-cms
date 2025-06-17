@@ -104,7 +104,7 @@ def save_playback_settings(settings_data):
 
 # --- JWT 認證裝飾器 ---
 def token_required(f):
-    """JWT 認證裝飾器，用於保護需要登入才能存取的路由"""
+    """JWT 認證裝飾器，用於保護需要登入才能存取的 API 路由"""
     @wraps(f)
     def decorated(*args, **kwargs):
         token = None
@@ -122,18 +122,43 @@ def token_required(f):
         return f(current_user, *args, **kwargs)
     return decorated
 
+def page_auth_required(f):
+    """頁面認證裝飾器，用於保護需要登入才能存取的頁面路由，失敗時重定向到登入頁面"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+        if 'Authorization' in request.headers and request.headers['Authorization'].startswith('Bearer '):
+            token = request.headers['Authorization'].split(" ")[1]
+        if not token:
+            return redirect(url_for('login_page'))
+        try:
+            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
+            current_user = User.query.filter_by(username=data['username']).first()
+            if not current_user:
+                return redirect(url_for('login_page'))
+        except Exception as e:
+            return redirect(url_for('login_page'))
+        return f(current_user, *args, **kwargs)
+    return decorated
+
 # --- 頁面渲染路由 ---
 @app.route('/')
-def index_page():
-    """渲染首頁"""
-    return render_template('index.html')
-
-@app.route('/login')
 def login_page():
-    """渲染登���頁面"""
+    """渲染登入頁面作為首頁"""
     return render_template('login.html')
 
+@app.route('/display')
+def display_page():
+    """渲染廣告機展示頁面，無需驗證"""
+    return render_template('display.html')
+
+@app.route('/login')
+def login_redirect():
+    """重定向到首頁登入"""
+    return redirect(url_for('login_page'))
+
 @app.route('/admin')
+@app.route('/admin/')
 def admin_page():
     """渲染管理員頁面，載入媒體資料和設定"""
     media_items = load_media_data()

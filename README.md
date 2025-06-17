@@ -73,7 +73,7 @@ MQ-CMS
 │   └── uploads/            # 上傳的媒體檔案存放處
 └── templates/
 ├── admin.html          # 後台管理頁面
-├── index.html          # 前端廣告機顯示頁面
+├── display.html        # 前端廣告機顯示頁面
 └── login.html          # 登入頁面
 ```
 

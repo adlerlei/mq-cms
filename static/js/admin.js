@@ -6,14 +6,28 @@ document.addEventListener('DOMContentLoaded', () => {
     // =========================================================================
 
     const JWT_TOKEN = localStorage.getItem('jwt_token');
+    const authCheckingScreen = document.getElementById('authCheckingScreen');
+    const mainContent = document.getElementById('mainContent');
 
     // 路由守衛 (Route Guard): 如果沒有 token，立即重導向到登入頁面
     if (!JWT_TOKEN) {
         // 假設後端 Flask 的登入頁面路由是 /login
-        window.location.href = '/login'; 
+        window.location.href = '/login';
         // 停止執行此腳本的任何後續程式碼，因為使用者未經授權
-        return; 
+        return;
     }
+
+    // 認證通過，顯示主要內容並隱藏載入畫面
+    function showMainContent() {
+        if (authCheckingScreen) authCheckingScreen.style.display = 'none';
+        if (mainContent) {
+            mainContent.classList.add('authenticated');
+            mainContent.style.display = 'block';
+        }
+    }
+
+    // 立即顯示主要內容（因為已經有 token）
+    showMainContent();
 
     /**
      * API 請求封裝 (API Request Wrapper)

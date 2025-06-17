@@ -14,17 +14,58 @@
         .table-section-header th { background-color: #f5f5f5; font-weight: bold; text-align: center; }
         .actions-cell form { display: inline-block; margin-left: 5px; }
         #upload-progress-container { display: none; margin-top: 1rem; }
+
+        /* 認證檢查相關樣式 */
+        .auth-checking {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            flex-direction: column;
+        }
+        .main-content {
+            display: none;
+        }
+        .main-content.authenticated {
+            display: block;
+        }
+
+        /* 載入動畫 */
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
-    <nav class="navbar is-primary" role="navigation">
-        <div class="container">
-            <div class="navbar-brand"><a class="navbar-item has-text-weight-bold" href="#">MQ 內容管理系統</a></div>
-            <div class="navbar-menu"><div class="navbar-end"><div class="navbar-item"><div class="buttons">
-                <button id="logoutButton" class="button is-primary is-light">登出</button>
-            </div></div></div></div>
+    <!-- 認證檢查載入畫面 -->
+    <div id="authCheckingScreen" class="auth-checking">
+        <div class="has-text-centered">
+            <div class="loader"></div>
+            <p class="mt-4">正在驗證身份...</p>
         </div>
-    </nav>
+    </div>
+
+    <!-- 主要內容 -->
+    <div id="mainContent" class="main-content">
+        <nav class="navbar is-primary" role="navigation">
+            <div class="container">
+                <div class="navbar-brand"><a class="navbar-item has-text-weight-bold" href="#">MQ 內容管理系統</a></div>
+                <div class="navbar-menu"><div class="navbar-end"><div class="navbar-item"><div class="buttons">
+                    <button id="logoutButton" class="button is-primary is-light">登出</button>
+                </div></div></div></div>
+            </div>
+        </nav>
     <section class="section">
         <div class="container">
             <div class="box mt-5">
@@ -219,5 +260,6 @@
         });
     </script>
     <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+    </div> <!-- 關閉 mainContent div -->
 </body>
 </html>
