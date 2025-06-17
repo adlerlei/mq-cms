@@ -359,13 +359,14 @@ def update_global_settings(current_user):
 def create_carousel_group(current_user):
     """處理建立新的輪播群組的請求"""
     group_name = request.form.get('group_name')
-    if not group_name: return redirect(url_for('admin_page'))
+    if not group_name:
+        return jsonify({'success': False, 'message': '群組名稱不能為空'}), 400
     media_items = load_media_data()
     new_group = {"id": str(uuid.uuid4()), "type": "carousel_group", "name": group_name, "image_ids": []}
     media_items.append(new_group)
     save_media_data(media_items)
     socketio.emit('media_updated', {'message': '群組已建立!'})
-    return redirect(url_for('admin_page'))
+    return jsonify({'success': True, 'message': '群組建立成功'})
 
 @app.route('/admin/carousel_group/delete/<group_id_to_delete>', methods=['POST'])
 @token_required
@@ -376,7 +377,9 @@ def delete_carousel_group(current_user, group_id_to_delete):
     if len(final_list) < len(media_items):
         save_media_data(final_list)
         socketio.emit('media_updated', {'message': '群組已刪除!'})
-    return redirect(url_for('admin_page'))
+        return jsonify({'success': True, 'message': '群組刪除成功'})
+    else:
+        return jsonify({'success': False, 'message': '找不到要刪除的群組'}), 404
 
 @app.route('/admin/carousel_group/update_images/<group_id>', methods=['POST'])
 @token_required

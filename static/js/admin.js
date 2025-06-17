@@ -641,9 +641,63 @@ document.addEventListener('DOMContentLoaded', () => {
 document.addEventListener('DOMContentLoaded', () => {
     // 監聽整個頁面的表單提交事件
     document.body.addEventListener('submit', function(event) {
-        
+
+        // 處理建立群組表單
+        if (event.target && event.target.matches('#createGroupForm')) {
+            // 1. 阻止表單用傳統方式送出
+            event.preventDefault();
+
+            const form = event.target;
+            const formData = new FormData(form);
+            const url = form.action;
+            const token = localStorage.getItem('jwt_token');
+            const submitButton = form.querySelector('#createGroupButton');
+
+            // 2. 檢查 Token 是否存在
+            if (!token) {
+                alert('認證已過期或不存在，請重新登入。');
+                window.location.href = '/login';
+                return;
+            }
+
+            // 3. 顯示載入狀態
+            if (submitButton) {
+                submitButton.classList.add('is-loading');
+                submitButton.disabled = true;
+            }
+
+            // 4. 使用 fetch API 發送帶有認證標頭的請求
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                },
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    console.log('群組建立成功！');
+                    window.location.reload(); // 重新整理頁面以顯示最新列表
+                } else {
+                    alert(`建立失敗: ${data.message || '未知錯誤'}`);
+                }
+            })
+            .catch(error => {
+                console.error('建立群組時發生錯誤:', error);
+                alert('建立失敗，請檢查網絡連線或查看控制台日誌。');
+            })
+            .finally(() => {
+                // 5. 恢復按鈕狀態
+                if (submitButton) {
+                    submitButton.classList.remove('is-loading');
+                    submitButton.disabled = false;
+                }
+            });
+        }
+
         // 判斷被提交的是否為我們標記的刪除表單
-        if (event.target && event.target.matches('form.delete-form')) {
+        else if (event.target && event.target.matches('form.delete-form')) {
             
             // 1. 阻止表單用傳統方式送出
             event.preventDefault(); 

@@ -161,7 +161,7 @@
                                         <span>輪播組: {{ grp.name if grp else '群組遺失' }}</span>
                                     {% endif %}
                                 </td>
-                                <td><span class="tag is-primary is-light">{{ '直接指派' if item.content_source_type == 'single_media' else '輪播���指派' }}</span></td>
+                                <td><span class="tag is-primary is-light">{{ '直接指派' if item.content_source_type == 'single_media' else '輪播群組指派' }}</span></td>
                                 <td>{{ available_sections.get(item.section_key, '未知區塊') }}</td>
                                 <td class="actions-cell has-text-right">
                                     
@@ -192,9 +192,9 @@
             <div class="box mt-5">
                 <h2 class="title is-4">管理輪播圖片組</h2>
                 <div class="box"><h3 class="title is-5">建立新群組</h3>
-                    <form action="{{ url_for('create_carousel_group') }}" method="POST">
+                    <form id="createGroupForm" action="{{ url_for('create_carousel_group') }}" method="POST">
                         <div class="field"><label class="label">群組名稱</label><div class="control"><input class="input" type="text" name="group_name" required placeholder="例如：春季新品輪播"></div></div>
-                        <div class="field is-grouped is-grouped-right"><button type="submit" class="button is-success">建立群組</button></div>
+                        <div class="field is-grouped is-grouped-right"><button type="submit" class="button is-success" id="createGroupButton">建立群組</button></div>
                     </form>
                 </div>
                 <div class="box mt-4"><h3 class="title is-5">現有群組</h3>
