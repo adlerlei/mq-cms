@@ -601,11 +601,22 @@ document.addEventListener('DOMContentLoaded', () => {
             if(fileInputForForm) fileInputForForm.required = true;
             if(sectionKeySelect) {
                 sectionKeySelect.innerHTML = '<option value="" disabled selected>-- 請選擇區塊 --</option>';
-                for (const key in available_sections_for_js) {
-                    const option = document.createElement('option');
-                    option.value = key;
-                    option.textContent = available_sections_for_js[key];
-                    sectionKeySelect.appendChild(option);
+                // 明確定義順序，確保下拉選單按照正確順序顯示
+                const sectionOrder = [
+                    'header_video',
+                    'carousel_top_left',
+                    'carousel_top_right',
+                    'carousel_bottom_left',
+                    'carousel_bottom_right',
+                    'footer_content'
+                ];
+                for (const key of sectionOrder) {
+                    if (available_sections_for_js[key]) {
+                        const option = document.createElement('option');
+                        option.value = key;
+                        option.textContent = available_sections_for_js[key];
+                        sectionKeySelect.appendChild(option);
+                    }
                 }
             }
         } else if (selectedType === 'carousel_reference') {
@@ -617,8 +628,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if(offsetInput) offsetInput.required = true;
             if(sectionKeySelect) {
                 sectionKeySelect.innerHTML = '<option value="" disabled selected>-- 請選擇輪播區塊 --</option>';
-                 for (const key in available_sections_for_js) {
-                    if (key.startsWith('carousel_')) {
+                // 明確定義輪播區塊的順序
+                const carouselSectionOrder = [
+                    'carousel_top_left',
+                    'carousel_top_right',
+                    'carousel_bottom_left',
+                    'carousel_bottom_right'
+                ];
+                for (const key of carouselSectionOrder) {
+                    if (available_sections_for_js[key]) {
                         const option = document.createElement('option');
                         option.value = key;
                         option.textContent = available_sections_for_js[key];
