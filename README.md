@@ -95,9 +95,16 @@ MQ-CMS
 
 ## 安裝與啟動指南
 
+### 系統需求
+- Python 3.8 或更高版本
+- 支援的作業系統：Linux, macOS, Windows
+- 建議使用虛擬環境
+
+### 安裝步驟
+
 1.  **建立虛擬環境** (建議):
     ```bash
-    python -m venv venv
+    python3 -m venv venv
     source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
     ```
 
@@ -106,21 +113,33 @@ MQ-CMS
     pip install -r requirements.txt
     ```
 
+    **注意**：如果遇到 `python` 命令找不到的錯誤，請使用 `python3` 命令：
+    ```bash
+    python3 -m pip install -r requirements.txt
+    ```
+
 3.  **初始化資料庫**:
     首次執行前，需要先建立資料庫和預設管理員帳號。
     ```bash
-    python init_db.py
+    python3 init_db.py
     ```
     這會建立 `users.db` 並新增一個預設帳號。
 
 4.  **啟動應用程式**:
     ```bash
-    python app.py
+    python3 app.py
     ```
 
 5.  **訪問應用**:
-    * **前端廣告機頁面**: `http://127.0.0.1:5000/`
-    * **後台登入頁面**: `http://127.0.0.1:5000/login`
+    * **登入頁面**: `http://127.0.0.1:5000/` (預設首頁)
+    * **廣告機顯示頁面**: `http://127.0.0.1:5000/display`
+    * **後台管理頁面**: `http://127.0.0.1:5000/admin` (需要登入)
+
+### 路由說明
+- `/` - 登入頁面 (系統入口)
+- `/display` - 廣告機顯示頁面 (無需認證)
+- `/admin` 或 `/admin/` - 後台管理頁面 (需要認證)
+- `/login` - 重定向到首頁 (向後兼容)
 
 ---
 
@@ -130,3 +149,66 @@ MQ-CMS
 * **密碼**: `password`
 
 **安全警告**: 請在首次登入後，於資料庫中手動修改預設密碼，或建立新的管理員帳號並刪除預設帳號，以確保系統安全。
+
+---
+
+## v3.0 版本更新內容
+
+### 🔧 主要修復
+- **圖片縮放問題**：修復頁首和頁尾區域圖片無法自動縮放的問題，現在支援 1920x1080 等高解析度圖片
+- **認證體驗優化**：消除管理頁面的跳轉閃爍效果，添加平滑的載入動畫
+- **表單提交修復**：解決輪播群組建立功能的 JWT 認證問題
+- **路由完整性**：支援 `/admin` 和 `/admin/` 兩種 URL 格式，消除 404 錯誤
+
+### 🚀 功能改進
+- **載入狀態指示**：表單提交時顯示載入動畫，提供更好的用戶反饋
+- **錯誤處理增強**：改善前端錯誤處理和用戶提示
+- **依賴管理優化**：更新並完善所有必要的 Python 套件
+
+### 🛠️ 技術改進
+- **認證機制優化**：區分 API 路由和頁面路由的認證處理方式
+- **前端架構改進**：統一 JavaScript 的認證請求處理
+- **CSS 樣式完善**：為所有媒體類型添加完整的縮放樣式
+
+---
+
+## 故障排除
+
+### 常見問題
+
+**Q: 啟動時出現 "Command 'python' not found" 錯誤**
+```
+A: 請使用 python3 命令：
+   python3 app.py
+   或安裝 python-is-python3 套件：
+   sudo apt install python-is-python3
+```
+
+**Q: 缺少 Flask-SQLAlchemy 或 PyJWT 套件**
+```
+A: 請確保安裝所有依賴套件：
+   pip install -r requirements.txt
+   或手動安裝：
+   pip install flask-sqlalchemy PyJWT
+```
+
+**Q: 訪問 /admin 時頁面閃爍或跳轉**
+```
+A: 這是正常的認證檢查流程，v3.0 已優化為平滑的載入體驗
+```
+
+**Q: 建立輪播群組時出現 "Token is missing" 錯誤**
+```
+A: v3.0 已修復此問題，請確保使用最新版本
+```
+
+**Q: 圖片在頁首區域顯示過大**
+```
+A: v3.0 已修復圖片縮放問題，圖片會自動適應容器大小
+```
+
+### 開發者注意事項
+- 建議使用 Python 3.8 或更高版本
+- 在生產環境中請修改預設密碼
+- 定期備份 `media.json` 和 `users.db` 文件
+- 監控 `static/uploads/` 目錄的磁碟空間使用情況
