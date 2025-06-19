@@ -152,7 +152,7 @@
                                         {% set mat = (materials | selectattr('id', 'equalto', item.media_id) | first) %}
                                         {% if mat %}
                                             {% if mat.type == 'image' %}<img src="{{ url_for('static', filename='uploads/' + mat.filename) }}" class="image-thumbnail">{% else %}<i class="fas fa-film fa-2x"></i>{% endif %}
-                                            <span>{{ mat.filename }}</span>
+                                            <span>{{ mat.original_filename or mat.filename }}</span>
                                         {% else %}
                                             <span class="has-text-danger">素材遺失 (ID: {{ item.media_id[:8] }})</span>
                                         {% endif %}
@@ -165,7 +165,7 @@
                                 <td>{{ available_sections.get(item.section_key, '未知區塊') }}</td>
                                 <td class="actions-cell has-text-right">
                                     
-                                    <form class="delete-form" action="{{ url_for('delete_media_item', item_id_to_delete=item.id) }}" method="POST" onsubmit="return confirm('確定刪除此指派?');"><button type="submit" class="button is-small is-danger">刪除指派</button></form>
+                                    <form class="delete-form" action="{{ url_for('delete_media_item', item_id_to_delete=item.id) }}" method="POST"><button type="submit" class="button is-small is-danger">刪除指派</button></form>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -175,7 +175,7 @@
                             <tr>
                                 <td>
                                     {% if item.type == 'image' %}<img src="{{ url_for('static', filename='uploads/' + item.filename) }}" class="image-thumbnail">{% else %}<i class="fas fa-film fa-2x"></i>{% endif %}
-                                    <span>{{ item.filename }}</span>
+                                    <span>{{ item.original_filename or item.filename }}</span>
                                 </td>
                                 <td><span class="tag is-info is-light">{{ '圖片素材' if item.type == 'image' else '影片素材' }}</span></td>
                                 <td><span class="is-italic">在庫，未指派</span></td>
@@ -183,8 +183,8 @@
                                     <button class="button is-small is-info reassign-media-button"
                                             data-media-id="{{ item.id }}"
                                             data-media-type="{{ item.type }}"
-                                            data-media-filename="{{ item.filename }}">重新指派</button>
-                                    <form class="delete-form" action="{{ url_for('delete_media_item', item_id_to_delete=item.id) }}" method="POST" onsubmit="return confirm('確定刪除此素材?');"><button type="submit" class="button is-small is-warning">刪除素材</button></form>
+                                            data-media-filename="{{ item.original_filename or item.filename }}">重新指派</button>
+                                    <form class="delete-form" action="{{ url_for('delete_media_item', item_id_to_delete=item.id) }}" method="POST"><button type="submit" class="button is-small is-warning">刪除素材</button></form>
                                 </td>
                             </tr>
                             {% endif %}{% endfor %}
@@ -213,7 +213,7 @@
                                 <td>{{ item.name }}</td><td>{{ item.image_ids | length }}</td>
                                 <td class="actions-cell has-text-right">
                                     <button class="button is-small is-link edit-group-images-button" data-group-id="{{ item.id }}" data-group-name="{{ item.name }}">編輯圖片</button>
-                                    <form class="delete-form" action="{{ url_for('delete_carousel_group', group_id_to_delete=item.id) }}" method="POST" onsubmit="return confirm('您確定要刪除這個輪播圖片組嗎？組本身會被刪除，引用此組的區塊指派也會被移除，但組內的圖片素材不會被刪除。');"><button type="submit" class="button is-small is-danger">刪除</button></form>
+                                    <form class="delete-form" action="{{ url_for('delete_carousel_group', group_id_to_delete=item.id) }}" method="POST"><button type="submit" class="button is-small is-danger">刪除</button></form>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -228,7 +228,17 @@
         <div class="modal-background"></div>
         <div class="modal-card">
             <header class="modal-card-head"><p class="modal-card-title">編輯輪播圖片組: <span id="modalGroupName"></span></p><button class="delete" aria-label="close"></button></header>
-            <section class="modal-card-body"><input type="hidden" id="modalGroupId"><div class="columns">
+            <section class="modal-card-body"><input type="hidden" id="modalGroupId">
+                <div class="notification is-info is-light mb-4">
+                    <p><strong>素材使用說明：</strong></p>
+                    <ul class="mt-2">
+                        <li>• 所有已上傳的圖片素材都可以加入輪播群組</li>
+                        <li>• <span class="tag is-warning is-small">已指派</span> 表示素材已單獨指派到其他區塊</li>
+                        <li>• <span class="tag is-info is-small">在其他群組</span> 表示素材已在其他輪播群組中使用</li>
+                        <li>• 同一素材可以同時用於多個地方，提高素材利用率</li>
+                    </ul>
+                </div>
+                <div class="columns">
                 <div class="column"><h4 class="title is-5">已選圖片 (可拖曳排序)</h4><div id="selectedImagesList" class="selected-images-list"><p class="has-text-grey-light has-text-centered p-4">此群組尚無圖片</p></div></div>
                 <div class="column"><h4 class="title is-5">所有可用圖片</h4><div id="availableImagesList" class="available-images-list"></div></div>
             </div></section>

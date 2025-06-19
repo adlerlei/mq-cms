@@ -397,6 +397,25 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Helper function to check if an image is assigned to any section
+    function checkIfImageIsAssigned(imageId) {
+        return allMediaItemsForJS.some(item =>
+            item.type === 'section_assignment' &&
+            item.content_source_type === 'single_media' &&
+            item.media_id === imageId
+        );
+    }
+
+    // Helper function to check if an image is used in other carousel groups
+    function checkIfImageInOtherGroups(imageId, currentGroupId) {
+        return allMediaItemsForJS.some(item =>
+            item.type === 'carousel_group' &&
+            item.id !== currentGroupId &&
+            item.image_ids &&
+            item.image_ids.includes(imageId)
+        );
+    }
+
     // --- 輪播組 Modal 內部相關的既有函式 (填充、新增、移除、拖曳) ---
     function populateAvailableImages(currentGroupId) {
         if(!availableImagesListDiv) return;
@@ -405,25 +424,57 @@ document.addEventListener('DOMContentLoaded', () => {
         const selectedImageIdsInCurrentGroup = group ? group.image_ids || [] : [];
 
         if (availableImageSources && availableImageSources.length > 0) {
-            availableImageSources.forEach(imgSrc => {
+            // Sort images: unassigned first, then assigned
+            const sortedImages = availableImageSources.sort((a, b) => {
+                const aAssigned = checkIfImageIsAssigned(a.id);
+                const bAssigned = checkIfImageIsAssigned(b.id);
+                if (aAssigned === bAssigned) return 0;
+                return aAssigned ? 1 : -1; // unassigned first
+            });
+
+            sortedImages.forEach(imgSrc => {
                 const entryDiv = document.createElement('div');
                 entryDiv.classList.add('media-item-entry');
                 entryDiv.dataset.imageId = imgSrc.id;
 
                 const imgPreview = document.createElement('img');
                 imgPreview.src = imgSrc.url;
-                imgPreview.alt = imgSrc.filename;
+                imgPreview.alt = imgSrc.original_filename || imgSrc.filename;
                 imgPreview.classList.add('image-thumbnail');
 
                 const fileNameSpan = document.createElement('span');
-                fileNameSpan.textContent = imgSrc.filename;
                 fileNameSpan.classList.add('is-flex-grow-1', 'ml-2');
+
+                // Create filename with status indicators
+                const filenameText = document.createElement('span');
+                filenameText.textContent = imgSrc.original_filename || imgSrc.filename;
+                fileNameSpan.appendChild(filenameText);
+
+                // Add status tags
+                const isAssigned = checkIfImageIsAssigned(imgSrc.id);
+                const inOtherGroups = checkIfImageInOtherGroups(imgSrc.id, currentGroupId);
+
+                if (isAssigned) {
+                    const assignedTag = document.createElement('span');
+                    assignedTag.classList.add('tag', 'is-warning', 'is-small', 'ml-2');
+                    assignedTag.textContent = '已指派';
+                    assignedTag.title = '此素材已指派到其他區塊';
+                    fileNameSpan.appendChild(assignedTag);
+                }
+
+                if (inOtherGroups) {
+                    const groupTag = document.createElement('span');
+                    groupTag.classList.add('tag', 'is-info', 'is-small', 'ml-1');
+                    groupTag.textContent = '在其他群組';
+                    groupTag.title = '此素材已在其他輪播群組中使用';
+                    fileNameSpan.appendChild(groupTag);
+                }
 
                 const addButton = document.createElement('button');
                 addButton.classList.add('button', 'is-small', 'is-success', 'add-image-to-group-button');
                 addButton.dataset.imageId = imgSrc.id;
                 addButton.dataset.imageUrl = imgSrc.url;
-                addButton.dataset.imageFilename = imgSrc.filename;
+                addButton.dataset.imageFilename = imgSrc.original_filename || imgSrc.filename;
 
                 if (selectedImageIdsInCurrentGroup.includes(imgSrc.id)) {
                     addButton.textContent = '已加入';
@@ -451,7 +502,7 @@ document.addEventListener('DOMContentLoaded', () => {
             group.image_ids.forEach(imageId => {
                 const imgSrc = availableImageSources.find(src => src.id === imageId);
                 if (imgSrc) {
-                    addSelectedImageToDOM(imgSrc.id, imgSrc.url, imgSrc.filename);
+                    addSelectedImageToDOM(imgSrc.id, imgSrc.url, imgSrc.original_filename || imgSrc.filename);
                 }
             });
         } else {
@@ -598,7 +649,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.assignmentType === 'single_media') {
             editDirectFields.style.display = 'block';
             const media = allMediaItemsForJS.find(m => m.id === data.mediaId);
-            document.getElementById('currentMediaFilename').textContent = media ? media.filename : '素材遺失';
+            document.getElementById('currentMediaFilename').textContent = media ? (media.original_filename || media.filename) : '素材遺失';
             document.getElementById('editMediaSelect').value = data.mediaId;
         } else if (data.assignmentType === 'group_reference') {
             editGroupFields.style.display = 'block';
@@ -838,7 +889,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // 3. 使用 fetch API 發送帶有認證標頭的請求
+            // 3. 檢查確認對話框的結果
+            // 由於我們攔截了表單提交，需要手動處理確認邏輯
+            const submitButton = form.querySelector('button[type="submit"]');
+            let confirmMessage = '';
+
+            if (submitButton && submitButton.textContent.includes('刪除指派')) {
+                confirmMessage = '確定刪除此指派?';
+            } else if (submitButton && submitButton.textContent.includes('刪除素材')) {
+                confirmMessage = '確定刪除此素材?';
+            } else if (submitButton && submitButton.textContent.includes('刪除')) {
+                // 對於輪播群組刪除
+                confirmMessage = '您確定要刪除這個輪播圖片組嗎？組本身會被刪除，引用此組的區塊指派也會被移除，但組內的圖片素材不會被刪除。';
+            }
+
+            // 顯示確認對話框
+            if (confirmMessage && !confirm(confirmMessage)) {
+                // 用戶點擊取消，不執行刪除
+                return;
+            }
+
+            // 4. 使用 fetch API 發送帶有認證標頭的請求
             fetch(url, {
                 method: 'POST',
                 headers: {
