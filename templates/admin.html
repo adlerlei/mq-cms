@@ -180,7 +180,11 @@
                                 <td><span class="tag is-info is-light">{{ '圖片素材' if item.type == 'image' else '影片素材' }}</span></td>
                                 <td><span class="is-italic">在庫，未指派</span></td>
                                 <td class="actions-cell has-text-right">
-                                    <form class="delete-form" action="{{ url_for('delete_media_item', item_id_to_delete=item.id) }}" method="POST" onsubmit="return confirm('確定刪除此素材?');"><button type="submit" class="button is-small is-danger">刪除素材</button></form>
+                                    <button class="button is-small is-info reassign-media-button"
+                                            data-media-id="{{ item.id }}"
+                                            data-media-type="{{ item.type }}"
+                                            data-media-filename="{{ item.filename }}">重新指派</button>
+                                    <form class="delete-form" action="{{ url_for('delete_media_item', item_id_to_delete=item.id) }}" method="POST" onsubmit="return confirm('確定刪除此素材?');"><button type="submit" class="button is-small is-warning">刪除素材</button></form>
                                 </td>
                             </tr>
                             {% endif %}{% endfor %}
@@ -231,7 +235,39 @@
             <footer class="modal-card-foot"><button id="saveGroupChangesButton" class="button is-success">儲存變更</button><button class="button" id="cancelGroupChangesButton">取消</button></footer>
         </div>
     </div>
-    
+
+    <!-- 重新指派素材 Modal -->
+    <div id="reassignMediaModal" class="modal">
+        <div class="modal-background"></div>
+        <div class="modal-card">
+            <header class="modal-card-head">
+                <p class="modal-card-title">重新指派素材: <span id="reassignMediaFilename"></span></p>
+                <button class="delete" aria-label="close"></button>
+            </header>
+            <section class="modal-card-body">
+                <form id="reassignMediaForm">
+                    <input type="hidden" id="reassignMediaId">
+                    <input type="hidden" id="reassignMediaType">
+
+                    <div class="field">
+                        <label class="label">選擇指派區塊</label>
+                        <div class="control">
+                            <div class="select is-fullwidth">
+                                <select id="reassignSectionSelect" required>
+                                    <option value="" disabled selected>-- 請選擇區塊 --</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </section>
+            <footer class="modal-card-foot">
+                <button id="confirmReassignButton" class="button is-success">確認指派</button>
+                <button class="button" id="cancelReassignButton">取消</button>
+            </footer>
+        </div>
+    </div>
+
     <!-- Socket.IO 客户端库 -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script>

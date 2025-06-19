@@ -283,10 +283,49 @@ def add_media_item(current_user):
             socketio.emit('media_updated', {'message': '操作完成!'})
         
         return redirect(url_for('admin_page'))
-        
+
     except Exception as e:
         print(f"處理請求時發生錯誤: {str(e)}")
         return jsonify({'message': f'處理請求時發生錯誤: {str(e)}'}), 500
+
+@app.route('/admin/reassign', methods=['POST'])
+@token_required
+def reassign_media(current_user):
+    """處理重新指派未使用素材的請求"""
+    try:
+        media_id = request.form.get('media_id')
+        section_key = request.form.get('section_key')
+        media_type = request.form.get('type')
+
+        if not media_id or not section_key or not media_type:
+            return jsonify({'message': '缺少必要參數'}), 400
+
+        media_items = load_media_data()
+
+        # 檢查素材是否存在
+        media_exists = any(item.get('id') == media_id and item.get('type') in ['image', 'video']
+                          for item in media_items)
+        if not media_exists:
+            return jsonify({'message': '找不到指定的素材'}), 404
+
+        # 創建新的指派
+        new_assignment = {
+            "id": str(uuid.uuid4()),
+            "type": "section_assignment",
+            "section_key": section_key,
+            "content_source_type": "single_media",
+            "media_id": media_id
+        }
+
+        media_items.append(new_assignment)
+        save_media_data(media_items)
+        socketio.emit('media_updated', {'message': '素材已重新指派!'})
+
+        return jsonify({'success': True, 'message': '重新指派成功'})
+
+    except Exception as e:
+        print(f"重新指派時發生錯誤: {str(e)}")
+        return jsonify({'message': f'重新指派時發生錯誤: {str(e)}'}), 500
 
 
 @app.route('/admin/delete/<item_id_to_delete>', methods=['POST'])

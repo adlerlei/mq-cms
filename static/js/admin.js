@@ -29,6 +29,113 @@ document.addEventListener('DOMContentLoaded', () => {
     // 立即顯示主要內容（因為已經有 token）
     showMainContent();
 
+    // =========================================================================
+    // 重新指派素材功能 (Reassign Media Feature)
+    // =========================================================================
+
+    const reassignMediaModal = document.getElementById('reassignMediaModal');
+    const reassignMediaForm = document.getElementById('reassignMediaForm');
+    const reassignSectionSelect = document.getElementById('reassignSectionSelect');
+    const confirmReassignButton = document.getElementById('confirmReassignButton');
+
+    // 開啟重新指派 Modal
+    document.addEventListener('click', function(event) {
+        if (event.target && event.target.classList.contains('reassign-media-button')) {
+            const mediaId = event.target.dataset.mediaId;
+            const mediaType = event.target.dataset.mediaType;
+            const mediaFilename = event.target.dataset.mediaFilename;
+
+            // 設定 Modal 內容
+            document.getElementById('reassignMediaId').value = mediaId;
+            document.getElementById('reassignMediaType').value = mediaType;
+            document.getElementById('reassignMediaFilename').textContent = mediaFilename;
+
+            // 填充區塊選項
+            populateReassignSectionOptions();
+
+            // 顯示 Modal
+            reassignMediaModal.classList.add('is-active');
+        }
+    });
+
+    // 填充重新指派的區塊選項
+    function populateReassignSectionOptions() {
+        if (!reassignSectionSelect) return;
+
+        reassignSectionSelect.innerHTML = '<option value="" disabled selected>-- 請選擇區塊 --</option>';
+
+        // 使用與主表單相同的順序
+        const sectionOrder = [
+            'header_video',
+            'carousel_top_left',
+            'carousel_top_right',
+            'carousel_bottom_left',
+            'carousel_bottom_right',
+            'footer_content'
+        ];
+
+        for (const key of sectionOrder) {
+            if (available_sections_for_js[key]) {
+                const option = document.createElement('option');
+                option.value = key;
+                option.textContent = available_sections_for_js[key];
+                reassignSectionSelect.appendChild(option);
+            }
+        }
+    }
+
+    // 關閉重新指派 Modal
+    function closeReassignModal() {
+        if (reassignMediaModal) reassignMediaModal.classList.remove('is-active');
+    }
+
+    // Modal 關閉事件
+    reassignMediaModal?.querySelector('.delete')?.addEventListener('click', closeReassignModal);
+    reassignMediaModal?.querySelector('#cancelReassignButton')?.addEventListener('click', closeReassignModal);
+    reassignMediaModal?.querySelector('.modal-background')?.addEventListener('click', closeReassignModal);
+
+    // 確認重新指派
+    confirmReassignButton?.addEventListener('click', async function() {
+        const mediaId = document.getElementById('reassignMediaId').value;
+        const mediaType = document.getElementById('reassignMediaType').value;
+        const sectionKey = reassignSectionSelect.value;
+
+        if (!sectionKey) {
+            alert('請選擇一個區塊');
+            return;
+        }
+
+        this.classList.add('is-loading');
+
+        try {
+            // 創建新的指派
+            const formData = new FormData();
+            formData.append('type', mediaType);
+            formData.append('section_key', sectionKey);
+            formData.append('media_id', mediaId);
+
+            const response = await fetchWithAuth('/admin/reassign', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.message || '重新指派失敗');
+            }
+
+            // 成功後重新載入頁面
+            window.location.reload();
+
+        } catch (error) {
+            if (error.message !== 'Unauthorized') {
+                alert(`重新指派失敗: ${error.message}`);
+            }
+        } finally {
+            this.classList.remove('is-loading');
+        }
+    });
+
     /**
      * API 請求封裝 (API Request Wrapper)
      * 一個輔助函數，用於發送帶有 JWT 認證標頭的 fetch 請求。
