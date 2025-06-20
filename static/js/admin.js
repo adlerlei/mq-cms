@@ -1036,8 +1036,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     groupImageUpload.value = '';
                     groupUploadFileName.textContent = '未選擇任何檔案';
                     
-                    // 成功提示
-                    alert(result.message);
+                    // 可選：添加一個簡短的視覺反饋
+                    console.log(`成功上傳 ${result.uploaded_images ? result.uploaded_images.length : 0} 張圖片`);
                 } else {
                     alert(`上傳失敗: ${result.message}`);
                 }
