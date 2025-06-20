@@ -224,20 +224,62 @@
             </div>
         </div>
     </section>
+    <!-- 在編輯輪播圖片組的Modal中，在「所有可用圖片」區域上方新增上傳區域 -->
     <div id="editCarouselGroupModal" class="modal">
         <div class="modal-background"></div>
         <div class="modal-card">
-            <header class="modal-card-head"><p class="modal-card-title">編輯輪播圖片組: <span id="modalGroupName"></span></p><button class="delete" aria-label="close"></button></header>
-            <section class="modal-card-body"><input type="hidden" id="modalGroupId">
+            <header class="modal-card-head">
+                <p class="modal-card-title">編輯輪播圖片組: <span id="modalGroupName"></span></p>
+                <button class="delete" aria-label="close"></button>
+            </header>
+            <section class="modal-card-body">
+                <input type="hidden" id="modalGroupId">
+                
+                <!-- 新增：群組專屬上傳區域 -->
+                <div class="box mb-4" style="background-color: #f0f8ff; border: 2px dashed #3273dc;">
+                    <h5 class="title is-6 has-text-primary">
+                        <i class="fas fa-upload"></i> 上傳圖片到此群組
+                    </h5>
+                    <div class="field">
+                        <div class="control">
+                            <div class="file has-name is-fullwidth">
+                                <label class="file-label">
+                                    <input class="file-input" type="file" id="groupImageUpload" 
+                                           accept=".jpg,.jpeg,.png,.gif" multiple>
+                                    <span class="file-cta">
+                                        <i class="fas fa-upload"></i>
+                                        <span>選擇多張圖片...</span>
+                                    </span>
+                                    <span class="file-name" id="groupUploadFileName">未選擇任何檔案</span>
+                                </label>
+                            </div>
+                        </div>
+                        <p class="help is-info">支援格式：JPG, PNG, GIF | 可一次選擇多張圖片</p>
+                    </div>
+                    <div class="field">
+                        <button id="uploadToGroupButton" class="button is-primary" disabled>
+                            <i class="fas fa-upload"></i>
+                            <span>上傳到此群組</span>
+                        </button>
+                    </div>
+                    <!-- 上傳進度條 -->
+                    <div id="groupUploadProgress" class="progress-container" style="display: none;">
+                        <progress class="progress is-primary" value="0" max="100">0%</progress>
+                        <p class="has-text-centered mt-2">上傳中...</p>
+                    </div>
+                </div>
+                
                 <div class="notification is-info is-light mb-4">
                     <p><strong>素材使用說明：</strong></p>
                     <ul class="mt-2">
+                        <li>• 可直接上傳圖片到此群組，上傳後立即可用</li>
                         <li>• 所有已上傳的圖片素材都可以加入輪播群組</li>
                         <li>• <span class="tag is-warning is-small">已指派</span> 表示素材已單獨指派到其他區塊</li>
                         <li>• <span class="tag is-info is-small">在其他群組</span> 表示素材已在其他輪播群組中使用</li>
-                        <li>• 同一素材可以同時用於多個地方，提高素材利用率</li>
+                        <li>• <span class="tag is-success is-small">群組：XXX</span> 表示群組專屬圖片</li>
                     </ul>
                 </div>
+                
                 <div class="columns">
                 <div class="column"><h4 class="title is-5">已選圖片 (可拖曳排序)</h4><div id="selectedImagesList" class="selected-images-list"><p class="has-text-grey-light has-text-centered p-4">此群組尚無圖片</p></div></div>
                 <div class="column"><h4 class="title is-5">所有可用圖片</h4><div id="availableImagesList" class="available-images-list"></div></div>
@@ -282,7 +324,7 @@
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script>
         const allMediaItemsForJS = {{ media_items | tojson }};
-        const availableImageSources = allMediaItemsForJS.filter(item => item.type === 'image');
+        let availableImageSources = allMediaItemsForJS.filter(item => item.type === 'image');
         const available_sections_for_js = {{ available_sections | tojson }};
         
         // 初始化 Socket.IO 连接

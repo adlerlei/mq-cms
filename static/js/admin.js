@@ -1,3 +1,111 @@
+// Helper function to check if an image is assigned to any section
+function checkIfImageIsAssigned(imageId) {
+    return allMediaItemsForJS.some(item =>
+        item.type === 'section_assignment' &&
+        item.content_source_type === 'single_media' &&
+        item.media_id === imageId
+    );
+}
+
+// Helper function to check if an image is used in other carousel groups
+function checkIfImageInOtherGroups(imageId, currentGroupId) {
+    return allMediaItemsForJS.some(item =>
+        item.type === 'carousel_group' &&
+        item.id !== currentGroupId &&
+        item.image_ids &&
+        item.image_ids.includes(imageId)
+    );
+}
+
+function populateAvailableImages(currentGroupId) {
+    const availableImagesListDiv = document.getElementById('availableImagesList');
+    if(!availableImagesListDiv) return;
+    availableImagesListDiv.innerHTML = '';
+    const group = allMediaItemsForJS.find(item => item.id === currentGroupId && item.type === 'carousel_group');
+    const selectedImageIdsInCurrentGroup = group ? group.image_ids || [] : [];
+
+    if (availableImageSources && availableImageSources.length > 0) {
+        // Sort images: unassigned first, then assigned
+        const sortedImages = availableImageSources.sort((a, b) => {
+            const aAssigned = checkIfImageIsAssigned(a.id);
+            const bAssigned = checkIfImageIsAssigned(b.id);
+            if (aAssigned === bAssigned) return 0;
+            return aAssigned ? 1 : -1; // unassigned first
+        });
+
+        sortedImages.forEach(imgSrc => {
+            const entryDiv = document.createElement('div');
+            entryDiv.classList.add('media-item-entry');
+            entryDiv.dataset.imageId = imgSrc.id;
+
+            const imgPreview = document.createElement('img');
+            imgPreview.src = imgSrc.url;
+            imgPreview.alt = imgSrc.original_filename || imgSrc.filename;
+            imgPreview.classList.add('image-thumbnail');
+
+            const fileNameSpan = document.createElement('span');
+            fileNameSpan.classList.add('is-flex-grow-1', 'ml-2');
+
+            // Create filename with status indicators
+            const filenameText = document.createElement('span');
+            filenameText.textContent = imgSrc.original_filename || imgSrc.filename;
+            fileNameSpan.appendChild(filenameText);
+
+            // Add status tags
+            const isAssigned = checkIfImageIsAssigned(imgSrc.id);
+            const inOtherGroups = checkIfImageInOtherGroups(imgSrc.id, currentGroupId);
+            const isGroupSpecific = imgSrc.source === 'group_specific';
+
+            if (isAssigned) {
+                const assignedTag = document.createElement('span');
+                assignedTag.classList.add('tag', 'is-warning', 'is-small', 'ml-2');
+                assignedTag.textContent = '已指派';
+                assignedTag.title = '此素材已指派到其他區塊';
+                fileNameSpan.appendChild(assignedTag);
+            }
+
+            if (inOtherGroups) {
+                const groupTag = document.createElement('span');
+                groupTag.classList.add('tag', 'is-info', 'is-small', 'ml-1');
+                groupTag.textContent = '在其他群組';
+                groupTag.title = '此素材已在其他輪播群組中使用';
+                fileNameSpan.appendChild(groupTag);
+            }
+            
+            // 新增：群組專屬標籤
+            if (isGroupSpecific && imgSrc.group_name) {
+                const groupSpecificTag = document.createElement('span');
+                groupSpecificTag.classList.add('tag', 'is-success', 'is-small', 'ml-1');
+                groupSpecificTag.textContent = `群組：${imgSrc.group_name}`;
+                groupSpecificTag.title = '此圖片專屬於特定群組';
+                fileNameSpan.appendChild(groupSpecificTag);
+            }
+
+            const addButton = document.createElement('button');
+            addButton.classList.add('button', 'is-small', 'is-success', 'add-image-to-group-button');
+            addButton.dataset.imageId = imgSrc.id;
+            addButton.dataset.imageUrl = imgSrc.url;
+            addButton.dataset.imageFilename = imgSrc.original_filename || imgSrc.filename;
+
+            if (selectedImageIdsInCurrentGroup.includes(imgSrc.id)) {
+                addButton.textContent = '已加入';
+                addButton.disabled = true;
+                addButton.classList.remove('is-success');
+                addButton.classList.add('is-light');
+            } else {
+                addButton.textContent = '加入';
+                addButton.disabled = false;
+            }
+            entryDiv.appendChild(imgPreview);
+            entryDiv.appendChild(fileNameSpan);
+            entryDiv.appendChild(addButton);
+            availableImagesListDiv.appendChild(entryDiv);
+        });
+    } else {
+        availableImagesListDiv.innerHTML = '<p class="has-text-grey-light has-text-centered p-4">沒有可用的圖片素材。</p>';
+    }
+}
+
 // 確保在 DOM 完全載入後執行腳本
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -397,103 +505,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Helper function to check if an image is assigned to any section
-    function checkIfImageIsAssigned(imageId) {
-        return allMediaItemsForJS.some(item =>
-            item.type === 'section_assignment' &&
-            item.content_source_type === 'single_media' &&
-            item.media_id === imageId
-        );
-    }
-
-    // Helper function to check if an image is used in other carousel groups
-    function checkIfImageInOtherGroups(imageId, currentGroupId) {
-        return allMediaItemsForJS.some(item =>
-            item.type === 'carousel_group' &&
-            item.id !== currentGroupId &&
-            item.image_ids &&
-            item.image_ids.includes(imageId)
-        );
-    }
-
     // --- 輪播組 Modal 內部相關的既有函式 (填充、新增、移除、拖曳) ---
-    function populateAvailableImages(currentGroupId) {
-        if(!availableImagesListDiv) return;
-        availableImagesListDiv.innerHTML = '';
-        const group = allMediaItemsForJS.find(item => item.id === currentGroupId && item.type === 'carousel_group');
-        const selectedImageIdsInCurrentGroup = group ? group.image_ids || [] : [];
-
-        if (availableImageSources && availableImageSources.length > 0) {
-            // Sort images: unassigned first, then assigned
-            const sortedImages = availableImageSources.sort((a, b) => {
-                const aAssigned = checkIfImageIsAssigned(a.id);
-                const bAssigned = checkIfImageIsAssigned(b.id);
-                if (aAssigned === bAssigned) return 0;
-                return aAssigned ? 1 : -1; // unassigned first
-            });
-
-            sortedImages.forEach(imgSrc => {
-                const entryDiv = document.createElement('div');
-                entryDiv.classList.add('media-item-entry');
-                entryDiv.dataset.imageId = imgSrc.id;
-
-                const imgPreview = document.createElement('img');
-                imgPreview.src = imgSrc.url;
-                imgPreview.alt = imgSrc.original_filename || imgSrc.filename;
-                imgPreview.classList.add('image-thumbnail');
-
-                const fileNameSpan = document.createElement('span');
-                fileNameSpan.classList.add('is-flex-grow-1', 'ml-2');
-
-                // Create filename with status indicators
-                const filenameText = document.createElement('span');
-                filenameText.textContent = imgSrc.original_filename || imgSrc.filename;
-                fileNameSpan.appendChild(filenameText);
-
-                // Add status tags
-                const isAssigned = checkIfImageIsAssigned(imgSrc.id);
-                const inOtherGroups = checkIfImageInOtherGroups(imgSrc.id, currentGroupId);
-
-                if (isAssigned) {
-                    const assignedTag = document.createElement('span');
-                    assignedTag.classList.add('tag', 'is-warning', 'is-small', 'ml-2');
-                    assignedTag.textContent = '已指派';
-                    assignedTag.title = '此素材已指派到其他區塊';
-                    fileNameSpan.appendChild(assignedTag);
-                }
-
-                if (inOtherGroups) {
-                    const groupTag = document.createElement('span');
-                    groupTag.classList.add('tag', 'is-info', 'is-small', 'ml-1');
-                    groupTag.textContent = '在其他群組';
-                    groupTag.title = '此素材已在其他輪播群組中使用';
-                    fileNameSpan.appendChild(groupTag);
-                }
-
-                const addButton = document.createElement('button');
-                addButton.classList.add('button', 'is-small', 'is-success', 'add-image-to-group-button');
-                addButton.dataset.imageId = imgSrc.id;
-                addButton.dataset.imageUrl = imgSrc.url;
-                addButton.dataset.imageFilename = imgSrc.original_filename || imgSrc.filename;
-
-                if (selectedImageIdsInCurrentGroup.includes(imgSrc.id)) {
-                    addButton.textContent = '已加入';
-                    addButton.disabled = true;
-                    addButton.classList.remove('is-success');
-                    addButton.classList.add('is-light');
-                } else {
-                    addButton.textContent = '加入';
-                    addButton.disabled = false;
-                }
-                entryDiv.appendChild(imgPreview);
-                entryDiv.appendChild(fileNameSpan);
-                entryDiv.appendChild(addButton);
-                availableImagesListDiv.appendChild(entryDiv);
-            });
-        } else {
-            availableImagesListDiv.innerHTML = '<p class="has-text-grey-light has-text-centered p-4">沒有可用的圖片素材。</p>';
-        }
-    }
     function populateSelectedImages(groupId) {
         if(!selectedImagesListDiv) return;
         selectedImagesListDiv.innerHTML = '';
@@ -936,4 +948,115 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
     });
+});
+
+// 在 admin.js 中新增以下功能
+
+// 群組專屬上傳功能
+document.addEventListener('DOMContentLoaded', () => {
+    // 群組圖片上傳相關元素
+    const groupImageUpload = document.getElementById('groupImageUpload');
+    const groupUploadFileName = document.getElementById('groupUploadFileName');
+    const uploadToGroupButton = document.getElementById('uploadToGroupButton');
+    const groupUploadProgress = document.getElementById('groupUploadProgress');
+    
+    // 檔案選擇事件
+    if (groupImageUpload) {
+        groupImageUpload.addEventListener('change', function() {
+            const files = this.files;
+            if (files.length > 0) {
+                if (files.length === 1) {
+                    groupUploadFileName.textContent = files[0].name;
+                } else {
+                    groupUploadFileName.textContent = `已選擇 ${files.length} 個檔案`;
+                }
+                uploadToGroupButton.disabled = false;
+            } else {
+                groupUploadFileName.textContent = '未選擇任何檔案';
+                uploadToGroupButton.disabled = true;
+            }
+        });
+    }
+    
+    // 上傳按鈕事件
+    if (uploadToGroupButton) {
+        uploadToGroupButton.addEventListener('click', async function() {
+            const files = groupImageUpload.files;
+            const groupId = document.getElementById('modalGroupId').value;
+            
+            if (!files || files.length === 0) {
+                alert('請先選擇要上傳的圖片');
+                return;
+            }
+            
+            if (!groupId) {
+                alert('群組ID錯誤');
+                return;
+            }
+            
+            // 顯示上傳進度
+            this.classList.add('is-loading');
+            this.disabled = true;
+            groupUploadProgress.style.display = 'block';
+            
+            try {
+                const formData = new FormData();
+                for (let i = 0; i < files.length; i++) {
+                    formData.append('files', files[i]);
+                }
+                
+                const token = localStorage.getItem('jwt_token');
+                const response = await fetch(`/admin/carousel_group/upload_images/${groupId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: formData
+                });
+                
+                console.log('Response status:', response.status);
+                console.log('Response ok:', response.ok);
+                
+                const result = await response.json();
+                console.log('Response result:', result);
+                
+                if (response.ok && result.success) {
+                    // 更新全域變數
+                    if (result.uploaded_images) {
+                        result.uploaded_images.forEach(img => {
+                            allMediaItemsForJS.push(img);
+                            availableImageSources.push(img);
+                        });
+                    }
+                    
+                    // 重新填充可用圖片列表
+                    populateAvailableImages(groupId);
+                    
+                    // 清空上傳表單
+                    groupImageUpload.value = '';
+                    groupUploadFileName.textContent = '未選擇任何檔案';
+                    
+                    // 成功提示
+                    alert(result.message);
+                } else {
+                    alert(`上傳失敗: ${result.message}`);
+                }
+                
+            } catch (error) {
+                console.error('上傳錯誤:', error);
+                // 更詳細的錯誤處理
+                if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+                    alert('網絡連線錯誤，請檢查網絡設置');
+                } else {
+                    alert(`上傳失敗: ${error.message}`);
+                }
+            } finally {
+                // 隱藏進度條，恢復按鈕狀態
+                this.classList.remove('is-loading');
+                this.disabled = false;
+                uploadToGroupButton.disabled = true;
+                groupUploadProgress.style.display = 'none';
+            }
+        });
+    }
 });

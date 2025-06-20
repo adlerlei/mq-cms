@@ -410,15 +410,125 @@ def create_carousel_group(current_user):
 @app.route('/admin/carousel_group/delete/<group_id_to_delete>', methods=['POST'])
 @token_required
 def delete_carousel_group(current_user, group_id_to_delete):
-    """處理刪除輪播群組的請求，同時移除所有引用該群組的指派"""
+    """處理刪除輪播群組的請求，同時刪除群組專屬的圖片，但保留全域圖片"""
     media_items = load_media_data()
-    final_list = [item for item in media_items if item.get('id') != group_id_to_delete and item.get('group_id') != group_id_to_delete]
+    
+    # 找出群組專屬的圖片（需要一起刪除的）
+    group_specific_images = [
+        item for item in media_items 
+        if item.get('type') == 'image' 
+        and item.get('source') == 'group_specific' 
+        and item.get('group_id') == group_id_to_delete
+    ]
+    
+    # 刪除群組專屬圖片的實體檔案
+    for image_item in group_specific_images:
+        filename = image_item.get('filename')
+        if filename:
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            try:
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+                    print(f"已刪除群組專屬圖片檔案: {filepath}")
+            except OSError as e:
+                print(f"刪除群組專屬圖片檔案時發生錯誤 {filepath}: {e}")
+    
+    # 從資料中移除：
+    # 1. 群組本身
+    # 2. 引用該群組的指派
+    # 3. 群組專屬的圖片
+    final_list = [
+        item for item in media_items 
+        if not (
+            # 移除群組本身
+            (item.get('id') == group_id_to_delete and item.get('type') == 'carousel_group') or
+            # 移除引用該群組的指派
+            (item.get('type') == 'section_assignment' and item.get('group_id') == group_id_to_delete) or
+            # 移除群組專屬的圖片
+            (item.get('type') == 'image' and item.get('source') == 'group_specific' and item.get('group_id') == group_id_to_delete)
+        )
+    ]
+    
     if len(final_list) < len(media_items):
         save_media_data(final_list)
-        socketio.emit('media_updated', {'message': '群組已刪除!'})
+        socketio.emit('media_updated', {'message': '群組及其專屬圖片已刪除！'})
         return jsonify({'success': True, 'message': '群組刪除成功'})
     else:
         return jsonify({'success': False, 'message': '找不到要刪除的群組'}), 404
+
+# 在現有路由後新增以下路由
+@app.route('/admin/carousel_group/upload_images/<group_id>', methods=['POST'])
+@token_required
+def upload_images_to_group(current_user, group_id):
+    """處理群組專屬的多圖片上傳"""
+    try:
+        # 檢查群組是否存在
+        media_items = load_media_data()
+        group = next((item for item in media_items if item.get('id') == group_id and item.get('type') == 'carousel_group'), None)
+        if not group:
+            return jsonify({'success': False, 'message': '找不到指定的群組'}), 404
+
+        # 檢查是否有上傳的檔案
+        if 'files' not in request.files:
+            return jsonify({'success': False, 'message': '沒有選擇檔案'}), 400
+
+        files = request.files.getlist('files')
+        if not files or all(file.filename == '' for file in files):
+            return jsonify({'success': False, 'message': '沒有選擇有效的檔案'}), 400
+
+        uploaded_images = []
+        
+        for file in files:
+            if file and file.filename != '':
+                # 檢查檔案類型
+                if not allowed_file(file.filename):
+                    continue  # 跳過不支援的檔案類型
+                
+                # 檢查是否為圖片
+                file_extension = file.filename.rsplit('.', 1)[1].lower()
+                if file_extension not in {'png', 'jpg', 'jpeg', 'gif'}:
+                    continue  # 只處理圖片檔案
+                
+                # 生成唯一檔名
+                new_image_id = str(uuid.uuid4())
+                unique_filename = f"{new_image_id}.{file_extension}"
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+                
+                # 確保上傳目錄存在
+                os.makedirs(app.config['UPLOAD_FOLDER'], mode=0o755, exist_ok=True)
+                
+                # 儲存檔案
+                file.save(filepath)
+                
+                # 建立圖片記錄
+                new_image_item = {
+                    "id": new_image_id,
+                    "original_filename": file.filename,
+                    "filename": unique_filename,
+                    "type": "image",
+                    "source": "group_specific",
+                    "group_id": group_id,
+                    "group_name": group.get('name', ''),
+                    "url": f"/{UPLOAD_FOLDER}/{unique_filename}"
+                }
+                
+                media_items.append(new_image_item)
+                uploaded_images.append(new_image_item)
+        
+        if uploaded_images:
+            save_media_data(media_items)
+            socketio.emit('media_updated', {'message': f'成功上傳 {len(uploaded_images)} 張圖片到群組！'})
+            return jsonify({
+                'success': True, 
+                'message': f'成功上傳 {len(uploaded_images)} 張圖片',
+                'uploaded_images': uploaded_images
+            })
+        else:
+            return jsonify({'success': False, 'message': '沒有成功上傳任何圖片，請檢查檔案格式'}), 400
+            
+    except Exception as e:
+        print(f"群組上傳圖片時發生錯誤: {str(e)}")
+        return jsonify({'success': False, 'message': f'上傳失敗: {str(e)}'}), 500
 
 @app.route('/admin/carousel_group/update_images/<group_id>', methods=['POST'])
 @token_required
