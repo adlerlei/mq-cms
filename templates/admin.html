@@ -6,46 +6,7 @@
     <title>MQ 內容管理系統</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bulma.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-    <style>
-        .media-list-table td, .media-list-table th { vertical-align: middle; }
-        .image-thumbnail { width: 64px; height: 64px; object-fit: cover; border: 1px solid #dbdbdb; border-radius: 4px; }
-        .media-item-entry { display: flex; align-items: center; justify-content: space-between; padding: 0.5em 0; border-bottom: 1px solid #eee; }
-        .available-images-list, .selected-images-list { max-height: 300px; overflow-y: auto; border: 1px solid #dbdbdb; padding: 10px; border-radius: 4px; }
-        .table-section-header th { background-color: #f5f5f5; font-weight: bold; text-align: center; }
-        .actions-cell form { display: inline-block; margin-left: 5px; }
-        #upload-progress-container { display: none; margin-top: 1rem; }
-
-        /* 認證檢查相關樣式 */
-        .auth-checking {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            flex-direction: column;
-        }
-        .main-content {
-            display: none;
-        }
-        .main-content.authenticated {
-            display: block;
-        }
-
-        /* 載入動畫 */
-        .loader {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #3498db;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
 </head>
 <body>
     <!-- 認證檢查載入畫面 -->
@@ -68,158 +29,175 @@
         </nav>
     <section class="section">
         <div class="container">
-            <div class="box mt-5">
-                <h2 class="title is-4">新增媒體 / 指派內容</h2>
-                <form id="uploadForm" action="{{ url_for('add_media_item') }}" method="POST" enctype="multipart/form-data">
-                    <div class="field"><label class="label">操作類型</label><div class="control"><div class="select is-fullwidth"><select name="type" id="mediaTypeSelect" required><option value="image">上傳圖片並指派</option><option value="video">上傳影片並指派</option><option value="carousel_reference">指派輪播組</option></select></div></div></div>
-                    <div id="sectionKeyField" class="field" style="display: none;"><label class="label">指派到區塊</label><div class="control"><div class="select is-fullwidth"><select name="section_key" id="sectionKeySelect"></select></div></div></div>
-                    <div id="fileUploadField" class="field">
-                        <label class="label">選擇檔案</label>
-                        <div class="control">
-                            <div class="file has-name is-fullwidth">
-                                <label class="file-label">
-                                    <input class="file-input" type="file" name="file" 
-                                           accept=".jpg,.jpeg,.png,.gif,.mp4,.mov,.avi">
-                                    <span class="file-cta">
-                                        <i class="fas fa-upload"></i>
-                                        <span>選擇檔案…</span>
-                                    </span>
-                                    <span class="file-name">未選擇任何檔案</span>
-                                </label>
+            <div class="columns is-multiline">
+                <!-- 新增媒體 / 指派內容 -->
+                <div class="column is-half">
+                    <div class="box">
+                        <h2 class="title is-4">新增媒體 / 指派內容</h2>
+                        <form id="uploadForm" action="{{ url_for('add_media_item') }}" method="POST" enctype="multipart/form-data">
+                            <div class="field"><label class="label">操作類型</label><div class="control"><div class="select is-fullwidth"><select name="type" id="mediaTypeSelect" required><option value="image">上傳圖片並指派</option><option value="video">上傳影片並指派</option><option value="carousel_reference">指派輪播組</option></select></div></div></div>
+                            <div id="sectionKeyField" class="field" style="display: none;"><label class="label">指派到區塊</label><div class="control"><div class="select is-fullwidth"><select name="section_key" id="sectionKeySelect"></select></div></div></div>
+                            <div id="fileUploadField" class="field">
+                                <label class="label">選擇檔案</label>
+                                <div class="control">
+                                    <div class="file has-name is-fullwidth">
+                                        <label class="file-label">
+                                            <input class="file-input" type="file" name="file" 
+                                                   accept=".jpg,.jpeg,.png,.gif,.mp4,.mov,.avi">
+                                            <span class="file-cta">
+                                                <i class="fas fa-upload"></i>
+                                                <span>選擇檔案…</span>
+                                            </span>
+                                            <span class="file-name">未選擇任何檔案</span>
+                                        </label>
+                                    </div>
+                                    <p class="help is-info">請確保檔案包含正確的副檔名（例如：.jpg、.png、.gif 等）</p>
+                                    <p class="help">支援的圖片格式：.jpg, .jpeg, .png, .gif</p>
+                                    <p class="help">支援的影片格式：.mp4, .mov, .avi</p>
+                                </div>
                             </div>
-                            <p class="help is-info">請確保檔案包含正確的副檔名（例如：.jpg、.png、.gif 等）</p>
-                            <p class="help">支援的圖片格式：.jpg, .jpeg, .png, .gif</p>
-                            <p class="help">支援的影片格式：.mp4, .mov, .avi</p>
+                            <div id="carouselGroupField" class="field" style="display: none;"><label class="label">選擇輪播組</label><div class="control"><div class="select is-fullwidth"><select name="carousel_group_id">{% for item in media_items %}{% if item.type == 'carousel_group' %}<option value="{{ item.id }}">{{ item.name }}</option>{% endif %}{% endfor %}</select></div></div></div>
+                            <div id="carouselOffsetField" class="field" style="display: none;">
+                                <label class="label">偏移量</label>
+                                <div class="control"><input class="input" type="number" name="offset" value="0" min="0"></div>
+                                <p class="help">例如：0 表示從第一張開始，1 表示從第二張開始，以此類推。</p>
+                            </div>
+                            <div id="upload-progress-container" class="field">
+                                <label class="label">上傳進度</label>
+                                <progress id="upload-progress-bar" class="progress is-primary" value="0" max="100">0%</progress>
+                                <span id="upload-progress-text">0%</span>
+                            </div>
+                            <div class="field is-grouped is-grouped-right"><button type="submit" class="button is-primary">執行操作</button></div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- 全局播放設定 -->
+                <div class="column is-half">
+                    <div class="box">
+                        <h2 class="title is-4">全局播放設定</h2>
+                        <div id="settings-notification" class="notification is-hidden"></div>
+                        <form id="globalSettingsForm">
+                            <div class="field">
+                                <label class="label" for="header_interval">頁首內容輪播間隔時間 (秒)</label>
+                                <div class="control"><input class="input" type="number" id="header_interval" value="{{ settings.get('header_interval', 5) }}"></div>
+                                <p class="help">適用於頁首區域有多個圖片/影片時的輪播間隔。</p>
+                            </div>
+                            <div class="field">
+                                <label class="label" for="carousel_interval">中間區塊圖片輪播間隔時間 (秒)</label>
+                                <div class="control"><input class="input" type="number" id="carousel_interval" value="{{ settings.get('carousel_interval', 6) }}"></div>
+                                <p class="help">適用於所有四個中間輪播區塊。</p>
+                            </div>
+                            <div class="field">
+                                <label class="label" for="footer_interval">頁尾內容輪播間隔時間 (秒)</label>
+                                <div class="control"><input class="input" type="number" id="footer_interval" value="{{ settings.get('footer_interval', 7) }}"></div>
+                                <p class="help">適用於頁尾區域有多個圖片/影片時的輪播間隔。</p>
+                            </div>
+                            <div class="field is-grouped is-grouped-right"><button type="submit" class="button is-info" id="saveSettingsButton">儲存設定</button></div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- 媒體庫與區塊內容指派 -->
+                <div class="column is-half">
+                    <div class="box">
+                        <h2 class="title is-4">媒體庫與區塊內容指派</h2>
+                        <div class="table-container">
+                            <table class="table is-fullwidth is-striped is-hoverable media-list-table">
+                                <thead><tr><th>預覽/資訊</th><th>類型</th><th>狀態/指派到區塊</th><th class="has-text-right">操作</th></tr></thead>
+                                <tbody>
+                                {% set assignments = media_items | selectattr('type', 'equalto', 'section_assignment') | list %}
+                                {% set materials = media_items | selectattr('type', 'in', ['image', 'video']) | list %}
+                                {% set groups = media_items | selectattr('type', 'equalto', 'carousel_group') | list %}
+                                {% set used_material_ids = [] %}
+                                {% for assign_item in assignments %}{% if assign_item.content_source_type == 'single_media' %}{% if used_material_ids.append(assign_item.media_id) %}{% endif %}{% endif %}{% endfor %}
+                                {% for group_item in groups %}{% if group_item.image_ids %}{% for img_id in group_item.image_ids %}{% if used_material_ids.append(img_id) %}{% endif %}{% endfor %}{% endif %}{% endfor %}
+
+                                {% if not media_items %}
+                                    <tr><td colspan="4" class="has-text-centered">目前媒體庫為空。</td></tr>
+                                {% else %}
+                                    {% if assignments %}<tr class="table-section-header"><th colspan="4">區塊內容指派</th></tr>{% endif %}
+                                    {% for item in assignments %}
+                                    <tr>
+                                        <td>
+                                            {% if item.content_source_type == 'single_media' %}
+                                                {% set mat = (materials | selectattr('id', 'equalto', item.media_id) | first) %}
+                                                {% if mat %}
+                                                    {% if mat.type == 'image' %}<img src="{{ url_for('static', filename='uploads/' + mat.filename) }}" class="image-thumbnail">{% else %}<i class="fas fa-film fa-2x"></i>{% endif %}
+                                                    <span>{{ mat.original_filename or mat.filename }}</span>
+                                                {% else %}
+                                                    <span class="has-text-danger">素材遺失 (ID: {{ item.media_id[:8] }})</span>
+                                                {% endif %}
+                                            {% elif item.content_source_type == 'group_reference' %}
+                                                {% set grp = (groups | selectattr('id', 'equalto', item.group_id) | first) %}
+                                                <span>輪播組: {{ grp.name if grp else '群組遺失' }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td><span class="tag is-primary is-light">{{ '直接指派' if item.content_source_type == 'single_media' else '輪播群組指派' }}</span></td>
+                                        <td>{{ available_sections.get(item.section_key, '未知區塊') }}</td>
+                                        <td class="actions-cell has-text-right">
+                                            
+                                            <form class="delete-form" action="{{ url_for('delete_media_item', item_id_to_delete=item.id) }}" method="POST"><button type="submit" class="button is-small is-danger">刪除指派</button></form>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+
+                                    {% set unused_materials_exist = false %}
+                                    {% for item in materials %}{% if item.id not in used_material_ids %}{% if not unused_materials_exist %}<tr class="table-section-header"><th colspan="4">未使用的素材</th></tr>{% set unused_materials_exist = true %}{% endif %}
+                                    <tr>
+                                        <td>
+                                            {% if item.type == 'image' %}<img src="{{ url_for('static', filename='uploads/' + item.filename) }}" class="image-thumbnail">{% else %}<i class="fas fa-film fa-2x"></i>{% endif %}
+                                            <span>{{ item.original_filename or item.filename }}</span>
+                                        </td>
+                                        <td><span class="tag is-info is-light">{{ '圖片素材' if item.type == 'image' else '影片素材' }}</span></td>
+                                        <td><span class="is-italic">在庫，未指派</span></td>
+                                        <td class="actions-cell has-text-right">
+                                            <button class="button is-small is-info reassign-media-button"
+                                                    data-media-id="{{ item.id }}"
+                                                    data-media-type="{{ item.type }}"
+                                                    data-media-filename="{{ item.original_filename or item.filename }}">重新指派</button>
+                                            <form class="delete-form" action="{{ url_for('delete_media_item', item_id_to_delete=item.id) }}" method="POST"><button type="submit" class="button is-small is-warning">刪除素材</button></form>
+                                        </td>
+                                    </tr>
+                                    {% endif %}{% endfor %}
+                                {% endif %}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
-                    <div id="carouselGroupField" class="field" style="display: none;"><label class="label">選擇輪播組</label><div class="control"><div class="select is-fullwidth"><select name="carousel_group_id">{% for item in media_items %}{% if item.type == 'carousel_group' %}<option value="{{ item.id }}">{{ item.name }}</option>{% endif %}{% endfor %}</select></div></div></div>
-                    <div id="carouselOffsetField" class="field" style="display: none;">
-                        <label class="label">偏移量</label>
-                        <div class="control"><input class="input" type="number" name="offset" value="0" min="0"></div>
-                        <p class="help">例如：0 表示從第一張開始，1 表示從第二張開始，以此類推。</p>
-                    </div>
-                    <div id="upload-progress-container" class="field">
-                        <label class="label">上傳進度</label>
-                        <progress id="upload-progress-bar" class="progress is-primary" value="0" max="100">0%</progress>
-                        <span id="upload-progress-text">0%</span>
-                    </div>
-                    <div class="field is-grouped is-grouped-right"><button type="submit" class="button is-primary">執行操作</button></div>
-                </form>
-            </div>
-            <div class="box mt-5">
-                <h2 class="title is-4">全局播放設定</h2>
-                <div id="settings-notification" class="notification is-hidden"></div>
-                <form id="globalSettingsForm">
-                    <div class="field">
-                        <label class="label" for="header_interval">頁首內容輪播間隔時間 (秒)</label>
-                        <div class="control"><input class="input" type="number" id="header_interval" value="{{ settings.get('header_interval', 5) }}"></div>
-                        <p class="help">適用於頁首區域有多個圖片/影片時的輪播間隔。</p>
-                    </div>
-                    <div class="field">
-                        <label class="label" for="carousel_interval">中間區塊圖片輪播間隔時間 (秒)</label>
-                        <div class="control"><input class="input" type="number" id="carousel_interval" value="{{ settings.get('carousel_interval', 6) }}"></div>
-                        <p class="help">適用於所有四個中間輪播區塊。</p>
-                    </div>
-                    <div class="field">
-                        <label class="label" for="footer_interval">頁尾內容輪播間隔時間 (秒)</label>
-                        <div class="control"><input class="input" type="number" id="footer_interval" value="{{ settings.get('footer_interval', 7) }}"></div>
-                        <p class="help">適用於頁尾區域有多個圖片/影片時的輪播間隔。</p>
-                    </div>
-                    <div class="field is-grouped is-grouped-right"><button type="submit" class="button is-info" id="saveSettingsButton">儲存設定</button></div>
-                </form>
-            </div>
-            <div class="box mt-5">
-                <h2 class="title is-4">媒體庫與區塊內容指派</h2>
-                <div class="table-container">
-                    <table class="table is-fullwidth is-striped is-hoverable media-list-table">
-                        <thead><tr><th>預覽/資訊</th><th>類型</th><th>狀態/指派到區塊</th><th class="has-text-right">操作</th></tr></thead>
-                        <tbody>
-                        {% set assignments = media_items | selectattr('type', 'equalto', 'section_assignment') | list %}
-                        {% set materials = media_items | selectattr('type', 'in', ['image', 'video']) | list %}
-                        {% set groups = media_items | selectattr('type', 'equalto', 'carousel_group') | list %}
-                        {% set used_material_ids = [] %}
-                        {% for assign_item in assignments %}{% if assign_item.content_source_type == 'single_media' %}{% if used_material_ids.append(assign_item.media_id) %}{% endif %}{% endif %}{% endfor %}
-                        {% for group_item in groups %}{% if group_item.image_ids %}{% for img_id in group_item.image_ids %}{% if used_material_ids.append(img_id) %}{% endif %}{% endfor %}{% endif %}{% endfor %}
-
-                        {% if not media_items %}
-                            <tr><td colspan="4" class="has-text-centered">目前媒體庫為空。</td></tr>
-                        {% else %}
-                            {% if assignments %}<tr class="table-section-header"><th colspan="4">區塊內容指派</th></tr>{% endif %}
-                            {% for item in assignments %}
-                            <tr>
-                                <td>
-                                    {% if item.content_source_type == 'single_media' %}
-                                        {% set mat = (materials | selectattr('id', 'equalto', item.media_id) | first) %}
-                                        {% if mat %}
-                                            {% if mat.type == 'image' %}<img src="{{ url_for('static', filename='uploads/' + mat.filename) }}" class="image-thumbnail">{% else %}<i class="fas fa-film fa-2x"></i>{% endif %}
-                                            <span>{{ mat.original_filename or mat.filename }}</span>
-                                        {% else %}
-                                            <span class="has-text-danger">素材遺失 (ID: {{ item.media_id[:8] }})</span>
-                                        {% endif %}
-                                    {% elif item.content_source_type == 'group_reference' %}
-                                        {% set grp = (groups | selectattr('id', 'equalto', item.group_id) | first) %}
-                                        <span>輪播組: {{ grp.name if grp else '群組遺失' }}</span>
-                                    {% endif %}
-                                </td>
-                                <td><span class="tag is-primary is-light">{{ '直接指派' if item.content_source_type == 'single_media' else '輪播群組指派' }}</span></td>
-                                <td>{{ available_sections.get(item.section_key, '未知區塊') }}</td>
-                                <td class="actions-cell has-text-right">
-                                    
-                                    <form class="delete-form" action="{{ url_for('delete_media_item', item_id_to_delete=item.id) }}" method="POST"><button type="submit" class="button is-small is-danger">刪除指派</button></form>
-                                </td>
-                            </tr>
-                            {% endfor %}
-
-                            {% set unused_materials_exist = false %}
-                            {% for item in materials %}{% if item.id not in used_material_ids %}{% if not unused_materials_exist %}<tr class="table-section-header"><th colspan="4">未使用的素材</th></tr>{% set unused_materials_exist = true %}{% endif %}
-                            <tr>
-                                <td>
-                                    {% if item.type == 'image' %}<img src="{{ url_for('static', filename='uploads/' + item.filename) }}" class="image-thumbnail">{% else %}<i class="fas fa-film fa-2x"></i>{% endif %}
-                                    <span>{{ item.original_filename or item.filename }}</span>
-                                </td>
-                                <td><span class="tag is-info is-light">{{ '圖片素材' if item.type == 'image' else '影片素材' }}</span></td>
-                                <td><span class="is-italic">在庫，未指派</span></td>
-                                <td class="actions-cell has-text-right">
-                                    <button class="button is-small is-info reassign-media-button"
-                                            data-media-id="{{ item.id }}"
-                                            data-media-type="{{ item.type }}"
-                                            data-media-filename="{{ item.original_filename or item.filename }}">重新指派</button>
-                                    <form class="delete-form" action="{{ url_for('delete_media_item', item_id_to_delete=item.id) }}" method="POST"><button type="submit" class="button is-small is-warning">刪除素材</button></form>
-                                </td>
-                            </tr>
-                            {% endif %}{% endfor %}
-                        {% endif %}
-                        </tbody>
-                    </table>
                 </div>
-            </div>
-            <div class="box mt-5">
-                <h2 class="title is-4">管理輪播圖片組</h2>
-                <div class="box"><h3 class="title is-5">建立新群組</h3>
-                    <form id="createGroupForm" action="{{ url_for('create_carousel_group') }}" method="POST">
-                        <div class="field"><label class="label">群組名稱</label><div class="control"><input class="input" type="text" name="group_name" required placeholder="例如：春季新品輪播"></div></div>
-                        <div class="field is-grouped is-grouped-right"><button type="submit" class="button is-success" id="createGroupButton">建立群組</button></div>
-                    </form>
-                </div>
-                <div class="box mt-4"><h3 class="title is-5">現有群組</h3>
-                    <div class="table-container"><table class="table is-fullwidth is-striped">
-                        <thead><tr><th>群組名稱</th><th>圖片數</th><th class="has-text-right">操作</th></tr></thead>
-                        <tbody>
-                        {% if not groups %}
-                            <tr><td colspan="3" class="has-text-centered">目前沒有任何輪播圖片組。</td></tr>
-                        {% else %}
-                            {% for item in groups %}
-                            <tr>
-                                <td>{{ item.name }}</td><td>{{ item.image_ids | length }}</td>
-                                <td class="actions-cell has-text-right">
-                                    <button class="button is-small is-link edit-group-images-button" data-group-id="{{ item.id }}" data-group-name="{{ item.name }}">編輯圖片</button>
-                                    <form class="delete-form" action="{{ url_for('delete_carousel_group', group_id_to_delete=item.id) }}" method="POST"><button type="submit" class="button is-small is-danger">刪除</button></form>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        {% endif %}
-                        </tbody>
-                    </table></div>
+
+                <!-- 管理輪播圖片組 -->
+                <div class="column is-half">
+                    <div class="box">
+                        <h2 class="title is-4">管理輪播圖片組</h2>
+                        <div class="box"><h3 class="title is-5">建立新群組</h3>
+                            <form id="createGroupForm" action="{{ url_for('create_carousel_group') }}" method="POST">
+                                <div class="field"><label class="label">群組名稱</label><div class="control"><input class="input" type="text" name="group_name" required placeholder="例如：春季新品輪播"></div></div>
+                                <div class="field is-grouped is-grouped-right"><button type="submit" class="button is-success" id="createGroupButton">建立群組</button></div>
+                            </form>
+                        </div>
+                        <div class="box mt-4"><h3 class="title is-5">現有群組</h3>
+                            <div class="table-container"><table class="table is-fullwidth is-striped">
+                                <thead><tr><th>群組名稱</th><th>圖片數</th><th class="has-text-right">操作</th></tr></thead>
+                                <tbody>
+                                {% if not groups %}
+                                    <tr><td colspan="3" class="has-text-centered">目前沒有任何輪播圖片組。</td></tr>
+                                {% else %}
+                                    {% for item in groups %}
+                                    <tr>
+                                        <td>{{ item.name }}</td><td>{{ item.image_ids | length }}</td>
+                                        <td class="actions-cell has-text-right">
+                                            <button class="button is-small is-link edit-group-images-button" data-group-id="{{ item.id }}" data-group-name="{{ item.name }}">編輯圖片</button>
+                                            <form class="delete-form" action="{{ url_for('delete_carousel_group', group_id_to_delete=item.id) }}" method="POST"><button type="submit" class="button is-small is-danger">刪除</button></form>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% endif %}
+                                </tbody>
+                            </table></div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
