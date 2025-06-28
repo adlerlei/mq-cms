@@ -665,6 +665,7 @@ def get_media_with_settings():
     # 為了讓後台 admin.html 仍然能讀取到所有素材和群組，暫時從資料庫查詢
     all_materials = Material.query.all()
     all_groups = CarouselGroup.query.all()
+    all_assignments = Assignment.query.all()
 
     # 將 SQLAlchemy 物件轉換為字典列表
     _debug_all_materials = [
@@ -673,11 +674,15 @@ def get_media_with_settings():
     _debug_all_groups = [
         {"id": g.id, "name": g.name, "image_ids": [assoc.material_id for assoc in g.image_associations]} for g in all_groups
     ]
+    _debug_all_assignments = [
+        {"id": a.id, "section_key": a.section_key, "content_source_type": a.content_source_type, "media_id": a.media_id, "group_id": a.group_id, "offset": a.offset} for a in all_assignments
+    ]
 
     return jsonify({"media": processed_media_for_frontend, 
                     "settings": settings, 
                     "_debug_all_materials": _debug_all_materials, 
-                    "_debug_all_groups": _debug_all_groups})
+                    "_debug_all_groups": _debug_all_groups,
+                    "_debug_all_assignments": _debug_all_assignments})
 
 # --- WebSocket ---
 @socketio.on('connect', namespace='/')

@@ -1,303 +1,309 @@
-// Helper function to check if an image is assigned to any section
-function checkIfImageIsAssigned(imageId) {
-    return allMediaItemsForJS.some(item =>
-        item.type === 'section_assignment' &&
-        item.content_source_type === 'single_media' &&
-        item.media_id === imageId
-    );
-}
+// =========================================================================
+// App State & Core Functions
+// =========================================================================
 
-// Helper function to check if an image is used in other carousel groups
-function checkIfImageInOtherGroups(imageId, currentGroupId) {
-    return allMediaItemsForJS.some(item =>
-        item.type === 'carousel_group' &&
-        item.id !== currentGroupId &&
-        item.image_ids &&
-        item.image_ids.includes(imageId)
-    );
-}
+// The single source of truth for our application's data.
+const appState = {
+    media: [],
+    groups: [],
+    assignments: [],
+    materials: [],
+    settings: {},
+    available_sections: {}
+};
 
-function populateAvailableImages(currentGroupId) {
-    const availableImagesListDiv = document.getElementById('availableImagesList');
-    if(!availableImagesListDiv) return;
-    availableImagesListDiv.innerHTML = '';
-    const group = allMediaItemsForJS.find(item => item.id === currentGroupId && item.type === 'carousel_group');
-    const selectedImageIdsInCurrentGroup = group ? group.image_ids || [] : [];
+// 全局變量來存儲DOM元素引用
+let mediaTypeSelect, sectionKeyField, fileUploadField, carouselGroupField, carouselOffsetField, sectionKeySelect;
 
-    if (availableImageSources && availableImageSources.length > 0) {
-        // Sort images: unassigned first, then assigned
-        const sortedImages = availableImageSources.sort((a, b) => {
-            const aAssigned = checkIfImageIsAssigned(a.id);
-            const bAssigned = checkIfImageIsAssigned(b.id);
-            if (aAssigned === bAssigned) return 0;
-            return aAssigned ? 1 : -1; // unassigned first
-        });
-
-        sortedImages.forEach(imgSrc => {
-            const entryDiv = document.createElement('div');
-            entryDiv.classList.add('media-item-entry');
-            entryDiv.dataset.imageId = imgSrc.id;
-
-            const imgPreview = document.createElement('img');
-            imgPreview.src = imgSrc.url;
-            imgPreview.alt = imgSrc.original_filename || imgSrc.filename;
-            imgPreview.classList.add('image-thumbnail');
-
-            const fileNameSpan = document.createElement('span');
-            fileNameSpan.classList.add('is-flex-grow-1', 'ml-2');
-
-            // Create filename with status indicators
-            const filenameText = document.createElement('span');
-            filenameText.textContent = imgSrc.original_filename || imgSrc.filename;
-            fileNameSpan.appendChild(filenameText);
-
-            // Add status tags
-            const isAssigned = checkIfImageIsAssigned(imgSrc.id);
-            const inOtherGroups = checkIfImageInOtherGroups(imgSrc.id, currentGroupId);
-            const isGroupSpecific = imgSrc.source === 'group_specific';
-
-            if (isAssigned) {
-                const assignedTag = document.createElement('span');
-                assignedTag.classList.add('tag', 'is-warning', 'is-small', 'ml-2');
-                assignedTag.textContent = '已指派';
-                assignedTag.title = '此素材已指派到其他區塊';
-                fileNameSpan.appendChild(assignedTag);
+/**
+ * 動態切換表單欄位的顯示
+ */
+function toggleFormFields() {
+    const selectedType = mediaTypeSelect?.value;
+    
+    if (selectedType === 'image' || selectedType === 'video') {
+        if(sectionKeyField) sectionKeyField.style.display = 'block';
+        if(fileUploadField) fileUploadField.style.display = 'block';
+        if(carouselGroupField) carouselGroupField.style.display = 'none';
+        if(carouselOffsetField) carouselOffsetField.style.display = 'none';
+        if(sectionKeySelect) {
+            sectionKeySelect.innerHTML = '<option value="" disabled selected>-- 請選擇區塊 --</option>';
+            const sectionOrder = ['header_video', 'carousel_top_left', 'carousel_top_right', 'carousel_bottom_left', 'carousel_bottom_right', 'footer_content'];
+            for (const key of sectionOrder) {
+                if (appState.available_sections[key]) {
+                    const option = document.createElement('option');
+                    option.value = key;
+                    option.textContent = appState.available_sections[key];
+                    sectionKeySelect.appendChild(option);
+                }
             }
-
-            if (inOtherGroups) {
-                const groupTag = document.createElement('span');
-                groupTag.classList.add('tag', 'is-info', 'is-small', 'ml-1');
-                groupTag.textContent = '在其他群組';
-                groupTag.title = '此素材已在其他輪播群組中使用';
-                fileNameSpan.appendChild(groupTag);
+        }
+    } else if (selectedType === 'group_reference') {
+        if(sectionKeyField) sectionKeyField.style.display = 'block';
+        if(fileUploadField) fileUploadField.style.display = 'none';
+        if(carouselGroupField) carouselGroupField.style.display = 'block';
+        if(carouselOffsetField) carouselOffsetField.style.display = 'block';
+        if(sectionKeySelect) {
+            sectionKeySelect.innerHTML = '<option value="" disabled selected>-- 請選擇輪播區塊 --</option>';
+            const carouselSectionOrder = ['carousel_top_left', 'carousel_top_right', 'carousel_bottom_left', 'carousel_bottom_right'];
+            for (const key of carouselSectionOrder) {
+                if (appState.available_sections[key]) {
+                    const option = document.createElement('option');
+                    option.value = key;
+                    option.textContent = appState.available_sections[key];
+                    sectionKeySelect.appendChild(option);
+                }
             }
-            
-            // 新增：群組專屬標籤
-            if (isGroupSpecific && imgSrc.group_name) {
-                const groupSpecificTag = document.createElement('span');
-                groupSpecificTag.classList.add('tag', 'is-success', 'is-small', 'ml-1');
-                groupSpecificTag.textContent = `群組：${imgSrc.group_name}`;
-                groupSpecificTag.title = '此圖片專屬於特定群組';
-                fileNameSpan.appendChild(groupSpecificTag);
-            }
-
-            const addButton = document.createElement('button');
-            addButton.classList.add('button', 'is-small', 'is-success', 'add-image-to-group-button');
-            addButton.dataset.imageId = imgSrc.id;
-            addButton.dataset.imageUrl = imgSrc.url;
-            addButton.dataset.imageFilename = imgSrc.original_filename || imgSrc.filename;
-
-            if (selectedImageIdsInCurrentGroup.includes(imgSrc.id)) {
-                addButton.textContent = '已加入';
-                addButton.disabled = true;
-                addButton.classList.remove('is-success');
-                addButton.classList.add('is-light');
-            } else {
-                addButton.textContent = '加入';
-                addButton.disabled = false;
-            }
-            entryDiv.appendChild(imgPreview);
-            entryDiv.appendChild(fileNameSpan);
-            entryDiv.appendChild(addButton);
-            availableImagesListDiv.appendChild(entryDiv);
-        });
-    } else {
-        availableImagesListDiv.innerHTML = '<p class="has-text-grey-light has-text-centered p-4">沒有可用的圖片素材。</p>';
+        }
     }
 }
 
+/**
+ * Fetches the latest data from the server, updates the app state,
+ * and re-renders the entire UI.
+ */
+async function fetchDataAndRender() {
+    try {
+        console.log('開始獲取數據...');
+        const response = await fetch('/api/media_with_settings');
+        console.log('API回應狀態:', response.status, response.statusText);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        console.log('獲取到的數據:', data);
+
+        // Update the state
+        appState.assignments = data._debug_all_assignments || [];
+        appState.materials = data._debug_all_materials || [];
+        appState.groups = data._debug_all_groups || [];
+        appState.settings = data.settings || {};
+        appState.available_sections = available_sections_for_js;
+
+        // Re-render all components
+        renderAll();
+        
+        // 在數據載入完成後調用 toggleFormFields
+        toggleFormFields();
+        
+        console.log('數據載入成功');
+
+    } catch (error) {
+        console.error('Error fetching data and rendering:', error);
+        console.error('錯誤詳情:', error.message);
+        alert(`無法從伺服器獲取最新資料：${error.message}\n請檢查伺服器是否正在運行，並嘗試重新整理頁面。`);
+    }
+}
+
+/**
+ * Main render function that orchestrates the rendering of all UI components.
+ */
+function renderAll() {
+    renderMediaAndAssignments();
+    renderCarouselGroups();
+    // Add other render functions here as needed (e.g., for forms)
+}
+
 // =========================================================================
-// 全域變數和函式 (Global Variables and Functions)
+// Render Functions
+// =========================================================================
+
+/**
+ * Renders the "Media Library & Assignments" table.
+ */
+function renderMediaAndAssignments() {
+    const tableBody = document.querySelector('.media-list-table tbody');
+    if (!tableBody) return;
+
+    const { assignments, materials, groups, available_sections } = appState;
+    
+    // Determine which materials are used
+    const used_material_ids = new Set();
+    assignments.forEach(assign => {
+        if (assign.content_source_type === 'single_media') {
+            used_material_ids.add(assign.media_id);
+        }
+    });
+    groups.forEach(group => {
+        (group.image_ids || []).forEach(id => used_material_ids.add(id));
+    });
+
+    let html = '';
+
+    // Render Assignments
+    if (assignments.length > 0) {
+        html += '<tr class="table-section-header"><th colspan="4">區塊內容指派</th></tr>';
+        assignments.forEach(item => {
+            let contentInfo = '';
+            if (item.content_source_type === 'single_media') {
+                const mat = materials.find(m => m.id === item.media_id);
+                if (mat) {
+                    const preview = mat.type === 'image' ? `<img src="${mat.url}" class="image-thumbnail">` : '<i class="fas fa-film fa-2x"></i>';
+                    contentInfo = `${preview} <span>${mat.original_filename || mat.filename}</span>`;
+                } else {
+                    contentInfo = '<span class="has-text-danger">素材遺失</span>';
+                }
+            } else if (item.content_source_type === 'group_reference') {
+                const grp = groups.find(g => g.id === item.group_id);
+                contentInfo = `<span>輪播組: ${grp ? grp.name : '群組遺失'}</span>`;
+            }
+
+            html += `
+                <tr>
+                    <td>${contentInfo}</td>
+                    <td><span class="tag is-primary is-light">${item.content_source_type === 'single_media' ? '直接指派' : '輪播群組指派'}</span></td>
+                    <td>${available_sections[item.section_key] || '未知區塊'}</td>
+                    <td class="actions-cell has-text-right">
+                        <form class="delete-form" data-item-id="${item.id}" data-item-type="assignment"><button type="submit" class="button is-small is-danger">刪除指派</button></form>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+
+    // Render Unused Materials
+    const unusedMaterials = materials.filter(m => !used_material_ids.has(m.id));
+    if (unusedMaterials.length > 0) {
+        html += '<tr class="table-section-header"><th colspan="4">未使用的素材</th></tr>';
+        unusedMaterials.forEach(item => {
+            const preview = item.type === 'image' ? `<img src="${item.url}" class="image-thumbnail">` : '<i class="fas fa-film fa-2x"></i>';
+            html += `
+                <tr>
+                    <td>${preview} <span>${item.original_filename || item.filename}</span></td>
+                    <td><span class="tag is-info is-light">${item.type === 'image' ? '圖片素材' : '影片素材'}</span></td>
+                    <td><span class="is-italic">在庫，未指派</span></td>
+                    <td class="actions-cell has-text-right">
+                        <button class="button is-small is-info reassign-media-button" data-media-id="${item.id}" data-media-type="${item.type}" data-media-filename="${item.original_filename || item.filename}">重新指派</button>
+                        <form class="delete-form" data-item-id="${item.id}" data-item-type="material"><button type="submit" class="button is-small is-warning">刪除素材</button></form>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+
+    if (html === '') {
+        html = '<tr><td colspan="4" class="has-text-centered">目前媒體庫為空。</td></tr>';
+    }
+
+    tableBody.innerHTML = html;
+}
+
+/**
+ * Renders the "Manage Carousel Groups" table.
+ */
+function renderCarouselGroups() {
+    const tableBody = document.querySelector('#createGroupForm').closest('.box').nextElementSibling.querySelector('tbody');
+    if (!tableBody) return;
+
+    const { groups } = appState;
+    let html = '';
+
+    if (groups.length === 0) {
+        html = '<tr><td colspan="3" class="has-text-centered">目前沒有任何輪播圖片組。</td></tr>';
+    } else {
+        groups.forEach(item => {
+            html += `
+                <tr>
+                    <td>${item.name}</td>
+                    <td>${(item.image_ids || []).length}</td>
+                    <td class="actions-cell has-text-right">
+                        <button class="button is-small is-link edit-group-images-button" data-group-id="${item.id}" data-group-name="${item.name}">編輯圖片</button>
+                        <form class="delete-form" data-item-id="${item.id}" data-item-type="carousel_group"><button type="submit" class="button is-small is-danger">刪除</button></form>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+    tableBody.innerHTML = html;
+}
+
+
+// =========================================================================
+// Helper Functions (fetchWithAuth, etc.)
 // =========================================================================
 const JWT_TOKEN = localStorage.getItem('jwt_token');
 
-/**
- * API 請求封裝 (API Request Wrapper)
- * 一個輔助函數，用於發送帶有 JWT 認證標頭的 fetch 請求。
- * 它會自動處理 401 (未授權) 錯誤，將使用者登出並重導向。
- * @param {string} url - The URL to fetch.
- * @param {object} options - Options for the fetch request (e.g., method, body).
- * @returns {Promise<Response>} - The fetch response promise.
- */
 async function fetchWithAuth(url, options = {}) {
-    // 準備請求標頭，加入 Authorization
-    const headers = {
-        ...options.headers,
-        'Authorization': `Bearer ${JWT_TOKEN}`
-    };
-
-    // 如果請求主體不是 FormData，則設定 Content-Type 為 application/json
-    // (fetch 會為 FormData 自動設定正確的 multipart/form-data 標頭)
+    const headers = { ...options.headers, 'Authorization': `Bearer ${JWT_TOKEN}` };
     if (!(options.body instanceof FormData)) {
         headers['Content-Type'] = 'application/json';
     }
-
     const response = await fetch(url, { ...options, headers });
-
-    // 檢查 Token 是否失效
     if (response.status === 401) {
         localStorage.removeItem('jwt_token');
         alert('您的登入已逾期或無效，請重新登入。');
         window.location.href = '/login';
-        // 拋出錯誤以中斷當前的 try...catch 鏈
         throw new Error('Unauthorized');
     }
-
     return response;
 }
 
-// 確保在 DOM 完全載入後執行腳本
+// =========================================================================
+// DOMContentLoaded - Main Entry Point
+// =========================================================================
 document.addEventListener('DOMContentLoaded', () => {
-
-    // =========================================================================
-    // WebSocket 連線與自動更新 (WebSocket Connection & Auto-Update)
-    // =========================================================================
+    // --- WebSocket Connection & Auto-Update ---
     const socket = io();
-    socket.on('connect', () => {
-        console.log('Socket.IO Connected!');
-    });
+    socket.on('connect', () => console.log('Socket.IO Connected!'));
     socket.on('media_updated', (data) => {
         console.log('Media updated message received:', data.message);
-        window.location.reload();
+        fetchDataAndRender();
     });
     socket.on('settings_updated', (data) => {
         console.log('Settings updated message received:', data);
-        window.location.reload();
+        fetchDataAndRender();
     });
 
-    // =========================================================================
-    // 認證檢查與 UI 顯示 (Authentication Check & UI Display)
-    // =========================================================================
+    // --- Auth Check & Initial Render ---
     const authCheckingScreen = document.getElementById('authCheckingScreen');
     const mainContent = document.getElementById('mainContent');
 
-    // 路由守衛 (Route Guard): 如果沒有 token，立即重導向到登入頁面
+    // 初始化全局DOM元素引用
+    mediaTypeSelect = document.getElementById('mediaTypeSelect');
+    sectionKeyField = document.getElementById('sectionKeyField');
+    fileUploadField = document.getElementById('fileUploadField');
+    carouselGroupField = document.getElementById('carouselGroupField');
+    carouselOffsetField = document.getElementById('carouselOffsetField');
+    sectionKeySelect = document.getElementById('sectionKeySelect');
+
     if (!JWT_TOKEN) {
         window.location.href = '/login';
         return;
     }
 
-    // 認證通過，顯示主要內容並隱藏載入畫面
-    function showMainContent() {
-        if (authCheckingScreen) authCheckingScreen.style.display = 'none';
-        if (mainContent) {
-            mainContent.classList.add('authenticated');
-            mainContent.style.display = 'block';
-        }
+    // 隱藏認證檢查畫面，顯示主內容
+    if (authCheckingScreen) {
+        authCheckingScreen.style.display = 'none';
+    }
+    if (mainContent) {
+        mainContent.style.display = 'block';
     }
 
-    // 立即顯示主要內容（因為已經有 token）
-    showMainContent();
+    // 初始化數據並渲染UI
+    fetchDataAndRender();
 
-    // =========================================================================
-    // 重新指派素材功能 (Reassign Media Feature)
-    // =========================================================================
-
-    const reassignMediaModal = document.getElementById('reassignMediaModal');
-    const reassignMediaForm = document.getElementById('reassignMediaForm');
-    const reassignSectionSelect = document.getElementById('reassignSectionSelect');
-    const confirmReassignButton = document.getElementById('confirmReassignButton');
-
-    // 開啟重新指派 Modal
-    document.addEventListener('click', function(event) {
-        if (event.target && event.target.classList.contains('reassign-media-button')) {
-            const mediaId = event.target.dataset.mediaId;
-            const mediaType = event.target.dataset.mediaType;
-            const mediaFilename = event.target.dataset.mediaFilename;
-
-            // 設定 Modal 內容
-            document.getElementById('reassignMediaId').value = mediaId;
-            document.getElementById('reassignMediaType').value = mediaType;
-            document.getElementById('reassignMediaFilename').textContent = mediaFilename;
-
-            // 填充區塊選項
-            populateReassignSectionOptions();
-
-            // 顯示 Modal
-            reassignMediaModal.classList.add('is-active');
-        }
-    });
-
-    // 填充重新指派的區塊選項
-    function populateReassignSectionOptions() {
-        if (!reassignSectionSelect) return;
-
-        reassignSectionSelect.innerHTML = '<option value="" disabled selected>-- 請選擇區塊 --</option>';
-
-        // 使用與主表單相同的順序
-        const sectionOrder = [
-            'header_video',
-            'carousel_top_left',
-            'carousel_top_right',
-            'carousel_bottom_left',
-            'carousel_bottom_right',
-            'footer_content'
-        ];
-
-        for (const key of sectionOrder) {
-            if (available_sections_for_js[key]) {
-                const option = document.createElement('option');
-                option.value = key;
-                option.textContent = available_sections_for_js[key];
-                reassignSectionSelect.appendChild(option);
-            }
-        }
+    // 監聽媒體類型變更
+    if (mediaTypeSelect) {
+        mediaTypeSelect.addEventListener('change', toggleFormFields);
     }
 
-    // 關閉重新指派 Modal
-    function closeReassignModal() {
-        if (reassignMediaModal) reassignMediaModal.classList.remove('is-active');
+    // 添加檔案選擇事件監聽器
+    const fileInput = document.querySelector('.file-input');
+    const fileName = document.querySelector('.file-name');
+    if (fileInput && fileName) {
+        fileInput.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                fileName.textContent = file.name;
+            } else {
+                fileName.textContent = '未選擇任何檔案';
+            }
+        });
     }
 
-    // Modal 關閉事件
-    reassignMediaModal?.querySelector('.delete')?.addEventListener('click', closeReassignModal);
-    reassignMediaModal?.querySelector('#cancelReassignButton')?.addEventListener('click', closeReassignModal);
-    reassignMediaModal?.querySelector('.modal-background')?.addEventListener('click', closeReassignModal);
-
-    // 確認重新指派
-    confirmReassignButton?.addEventListener('click', async function() {
-        const mediaId = document.getElementById('reassignMediaId').value;
-        const mediaType = document.getElementById('reassignMediaType').value; // 這裡的 mediaType 其實是 content_source_type
-        const sectionKey = reassignSectionSelect.value;
-
-        if (!sectionKey) {
-            alert('請選擇一個區塊');
-            return;
-        }
-
-        this.classList.add('is-loading');
-
-        try {
-            // 創建新的指派
-            const formData = new FormData();
-            formData.append('type', 'single_media'); // 重新指派本質上是單一媒體指派
-            formData.append('section_key', sectionKey);
-            formData.append('media_id', mediaId);
-
-            const response = await fetchWithAuth('/api/assignments', {
-                method: 'POST',
-                body: formData
-            });
-
-            if (!response.ok) {
-                const err = await response.json();
-                throw new Error(err.message || '重新指派失敗');
-            }
-
-            // 成功後重新載入頁面
-            window.location.reload();
-
-        } catch (error) {
-            if (error.message !== 'Unauthorized') {
-                alert(`重新指派失敗: ${error.message}`);
-            }
-        } finally {
-            this.classList.remove('is-loading');
-        }
-    });
-
-    
-    // 登出按鈕事件監聽
+    // Logout Button
     const logoutButton = document.getElementById('logoutButton');
     if(logoutButton) {
         logoutButton.addEventListener('click', () => {
@@ -306,20 +312,95 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // =========================================================================
-    // 新增：全局播放設定表單處理 (New: Global Settings Form Handling)
-    // =========================================================================
-    const globalSettingsForm = document.getElementById('globalSettingsForm');
-    const saveSettingsButton = document.getElementById('saveSettingsButton');
-    const settingsNotification = document.getElementById('settings-notification');
+    // Main Upload Form
+    const mainUploadForm = document.getElementById('uploadForm');
+    if (mainUploadForm) {
+        const submitButton = mainUploadForm.querySelector('button[type="submit"]');
+        const progressContainer = document.getElementById('upload-progress-container');
+        const progressBar = document.getElementById('upload-progress-bar');
+        const progressText = document.getElementById('upload-progress-text');
 
+        function resetUploadFormUI() {
+            submitButton.classList.remove('is-loading');
+            submitButton.disabled = false;
+            if (progressContainer) {
+                progressContainer.style.display = 'none';
+            }
+        }
+
+        mainUploadForm.addEventListener('submit', async function(event) {
+            event.preventDefault();
+
+            // --- UI Update: Show progress bar ---
+            if(progressContainer) progressContainer.style.display = 'block';
+            if(progressBar) progressBar.value = 0;
+            if(progressText) progressText.textContent = '0%';
+            submitButton.classList.add('is-loading');
+            submitButton.disabled = true;
+            // ------------------------------------
+
+            const formData = new FormData(mainUploadForm);
+            const selectedType = document.getElementById('mediaTypeSelect')?.value;
+            let apiUrl, httpMethod = 'POST', body = formData;
+
+            if (selectedType === 'image' || selectedType === 'video') {
+                apiUrl = '/api/materials';
+            } else if (selectedType === 'group_reference') {
+                apiUrl = '/api/assignments';
+            }
+
+            try {
+                const xhr = new XMLHttpRequest();
+                xhr.open(httpMethod, apiUrl, true);
+                xhr.setRequestHeader('Authorization', `Bearer ${JWT_TOKEN}`);
+
+                xhr.upload.onprogress = function(event) {
+                    if (event.lengthComputable) {
+                        const percentComplete = (event.loaded / event.total) * 100;
+                        if(progressBar) progressBar.value = percentComplete;
+                        if(progressText) progressText.textContent = Math.round(percentComplete) + '%';
+                    }
+                };
+
+                xhr.onload = function() {
+                    resetUploadFormUI();
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        fetchDataAndRender();
+                        mainUploadForm.reset();
+                        document.querySelector('.file-name').textContent = '未選擇任何檔案';
+                        toggleFormFields(); // After reset, re-toggle fields to ensure correct state
+                    } else {
+                        const err = JSON.parse(xhr.responseText);
+                        alert(`操作失敗: ${err.message || xhr.statusText}`);
+                    }
+                };
+
+                xhr.onerror = function() {
+                    resetUploadFormUI();
+                    alert('上傳過程中發生網路錯誤。');
+                };
+
+                xhr.send(body);
+
+            } catch (error) {
+                resetUploadFormUI();
+                if (error.message !== 'Unauthorized') {
+                    alert(`操作失敗: ${error.message}`);
+                }
+            }
+        });
+    }
+
+    // Global Settings Form
+    const globalSettingsForm = document.getElementById('globalSettingsForm');
     if (globalSettingsForm) {
         globalSettingsForm.addEventListener('submit', async (event) => {
-            event.preventDefault(); // 阻止表單預設的刷新頁面行為
+            event.preventDefault();
+            const saveButton = document.getElementById('saveSettingsButton');
+            const notification = document.getElementById('settings-notification');
 
-            saveSettingsButton.classList.add('is-loading');
-            saveSettingsButton.disabled = true;
-            settingsNotification.classList.add('is-hidden');
+            saveButton.classList.add('is-loading');
+            saveButton.disabled = true;
 
             const payload = {
                 header_interval: document.getElementById('header_interval').value,
@@ -332,598 +413,39 @@ document.addEventListener('DOMContentLoaded', () => {
                     method: 'POST',
                     body: JSON.stringify(payload)
                 });
-
                 const data = await response.json();
 
-                if (response.ok) {
-                    settingsNotification.textContent = data.message || '設定儲存成功！';
-                    settingsNotification.classList.remove('is-hidden', 'is-danger');
-                    settingsNotification.classList.add('is-success');
-                } else {
-                    throw new Error(data.message || '儲存設定失敗。');
-                }
+                if (!response.ok) throw new Error(data.message || '儲存設定失敗');
+
+                // SUCCESS: Show notification and then fetch new data
+                notification.textContent = data.message || '設定儲存成功！';
+                notification.classList.remove('is-hidden', 'is-danger');
+                notification.classList.add('is-success');
+                setTimeout(() => notification.classList.add('is-hidden'), 3000);
+
+                fetchDataAndRender(); // Re-fetch data to ensure state is in sync
 
             } catch (error) {
                 if (error.message !== 'Unauthorized') {
-                    settingsNotification.textContent = error.message;
-                    settingsNotification.classList.remove('is-hidden', 'is-success');
-                    settingsNotification.classList.add('is-danger');
+                    notification.textContent = error.message;
+                    notification.classList.remove('is-hidden', 'is-success');
+                    notification.classList.add('is-danger');
+                    setTimeout(() => notification.classList.add('is-hidden'), 3000);
                 }
             } finally {
-                saveSettingsButton.classList.remove('is-loading');
-                saveSettingsButton.disabled = false;
-                 // 3秒後自動隱藏提示訊息
-                setTimeout(() => {
-                    settingsNotification.classList.add('is-hidden');
-                }, 3000);
+                saveButton.classList.remove('is-loading');
+                saveButton.disabled = false;
             }
         });
     }
 
-    // =========================================================================
-    // 既有功能：檔案上傳表單 (Existing: File Upload Form)
-    // =========================================================================
-    
-    // 選取檔案輸入框和檔案名稱顯示元素
-    const fileInput = document.querySelector('.file-input');
-    const fileNameDisplay = document.querySelector('.file-name');
-
-    fileInput?.addEventListener('change', () => {
-        fileNameDisplay.textContent = fileInput.files.length > 0 ? fileInput.files[0].name : '未選擇任何檔案';
-    });
-
-    // 上傳表單和進度條相關元素
-    const uploadForm = document.getElementById('uploadForm');
-    const progressBarContainer = document.getElementById('upload-progress-container');
-    const progressBar = document.getElementById('upload-progress-bar');
-    const progressText = document.getElementById('upload-progress-text');
-    const uploadFormSubmitButton = uploadForm ? uploadForm.querySelector('button[type="submit"]') : null;
-
-    function resetUploadFormState(hideDelay = 0) {
-        uploadFormSubmitButton?.classList.remove('is-loading');
-        if (uploadFormSubmitButton) uploadFormSubmitButton.disabled = false;
-        if (hideDelay > 0) {
-            setTimeout(() => { if(progressBarContainer) progressBarContainer.style.display = 'none'; }, hideDelay);
-        } else if (progressBarContainer) {
-            progressBarContainer.style.display = 'none';
-        }
-    }
-
-    if (uploadForm) {
-        uploadForm.addEventListener('submit', async function(event) {
-            event.preventDefault(); // 阻止表單預設提交
-
-            if (!uploadForm.checkValidity()) {
-                console.warn('HTML5 表單驗證未通過 (uploadForm)。');
-                return;
-            }
-            
-            // UI 狀態更新
-            if(progressBarContainer) progressBarContainer.style.display = 'block';
-            if(progressBar) progressBar.value = 0;
-            if(progressText) progressText.textContent = '0%';
-            uploadFormSubmitButton?.classList.add('is-loading');
-            if(uploadFormSubmitButton) uploadFormSubmitButton.disabled = true;
-
-            const formData = new FormData(uploadForm);
-            const selectedType = mediaTypeSelect?.value; // 獲取選定的操作類型
-            console.log('Selected Type:', selectedType);
-
-            // 根據選定的類型調整 FormData
-            if (selectedType === 'image' || selectedType === 'video') {
-                console.log('Entering image/video upload logic');
-                // 對於直接上傳並指派，後端需要知道 section_key
-                formData.append('section_key', sectionKeySelect.value);
-                formData.append('type', selectedType); // 傳遞媒體類型給後端
-            } else if (selectedType === 'group_reference') {
-                console.log('Entering carousel assignment logic');
-                // 對於指派輪播組，我們將呼叫 /api/assignments
-                // 這裡不需要處理檔案上傳，所以直接呼叫 create_assignment
-                try {
-                    const response = await fetchWithAuth('/api/assignments', {
-                        method: 'POST',
-                        body: formData // FormData 包含 carousel_group_id, offset, section_key
-                    });
-
-                    if (!response.ok) {
-                    const err = await response.json();
-                    throw new Error(err.message || '指派輪播組失敗');
-                }
-                // 成功後不需提示，WebSocket 會自動重載頁面
-                } catch (error) {
-                    if (error.message !== 'Unauthorized') {
-                        alert(`指派輪播組失敗: ${error.message}`);
-                    }
-                } finally {
-                    resetUploadFormState();
-                    return; // 確保在處理完畢後立即返回，不執行後續的檔案上傳邏輯
-                }
-                return; // 處理完畢，不繼續執行檔案上傳邏輯
-            }
-
-            // 檔案上傳邏輯 (改用 XMLHttpRequest 以支援進度條)
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST', '/api/materials', true);
-            xhr.setRequestHeader('Authorization', `Bearer ${JWT_TOKEN}`);
-
-            // 上傳進度事件
-            xhr.upload.onprogress = function(event) {
-                if (event.lengthComputable) {
-                    const percentComplete = (event.loaded / event.total) * 100;
-                    if(progressBar) progressBar.value = percentComplete;
-                    if(progressText) progressText.textContent = Math.round(percentComplete) + '%';
-                }
-            };
-
-            // 上傳完成事件
-            xhr.onload = function() {
-                resetUploadFormState();
-                if (xhr.status >= 200 && xhr.status < 300) {
-                    // 成功後，不需要做任何事，因為 WebSocket 會觸發頁面重載
-                    console.log('Upload successful, waiting for WebSocket reload.');
-                } else {
-                    // 處理錯誤
-                    try {
-                        const err = JSON.parse(xhr.responseText);
-                        alert(`上傳失敗: ${err.message || '伺服器返回錯誤'}`);
-                    } catch (e) {
-                        alert(`上傳失敗: ${xhr.statusText}`);
-                    }
-                }
-            };
-
-            // 上傳錯誤事件
-            xhr.onerror = function() {
-                resetUploadFormState();
-                alert('上傳過程中發生網路錯誤。');
-            };
-
-            xhr.send(formData);
-        });
-    }
-
-    // =========================================================================
-    // 既有功能：輪播圖片組 Modal (Existing: Carousel Group Modal)
-    // =========================================================================
-    const editCarouselGroupModal = document.getElementById('editCarouselGroupModal');
-    const modalGroupName = document.getElementById('modalGroupName');
-    const modalGroupIdInput = document.getElementById('modalGroupId');
-    const selectedImagesListDiv = document.getElementById('selectedImagesList');
-    const availableImagesListDiv = document.getElementById('availableImagesList');
-    const saveGroupChangesButton = document.getElementById('saveGroupChangesButton');
-
-    function openCarouselModal() { if(editCarouselGroupModal) editCarouselGroupModal.classList.add('is-active'); }
-    function closeCarouselModal() { if(editCarouselGroupModal) editCarouselGroupModal.classList.remove('is-active'); }
-
-    // 開啟編輯輪播組 Modal
-    document.querySelectorAll('.edit-group-images-button').forEach(button => {
-        button.addEventListener('click', function() {
-            const groupId = this.dataset.groupId;
-            const groupName = this.dataset.groupName;
-            if(modalGroupIdInput) modalGroupIdInput.value = groupId;
-            if(modalGroupName) modalGroupName.textContent = groupName;
-            populateAvailableImages(groupId);
-            populateSelectedImages(groupId);
-            openCarouselModal();
-        });
-    });
-
-    // 關閉 Modal 的所有方式
-    editCarouselGroupModal?.querySelector('.delete')?.addEventListener('click', closeCarouselModal);
-    editCarouselGroupModal?.querySelector('#cancelGroupChangesButton')?.addEventListener('click', closeCarouselModal);
-    editCarouselGroupModal?.querySelector('.modal-background')?.addEventListener('click', closeCarouselModal);
-
-    // 儲存輪播組變更
-    if (saveGroupChangesButton) {
-        saveGroupChangesButton.addEventListener('click', async function() {
-            const groupId = modalGroupIdInput.value;
-            const selectedImageElements = selectedImagesListDiv?.querySelectorAll('.media-item-entry.draggable-item') || [];
-            const imageIdsInOrder = Array.from(selectedImageElements).map(el => el.dataset.imageId);
-
-            this.classList.add('is-loading');
-
-            try {
-                // **認證修改**: 使用 fetchWithAuth
-                const response = await fetchWithAuth(`/admin/carousel_group/update_images/${groupId}`, {
-                    method: 'POST',
-                    body: JSON.stringify({ image_ids: imageIdsInOrder }),
-                });
-
-                if (!response.ok) {
-                    const err = await response.json();
-                    throw new Error(err.message || '伺服器返回錯誤');
-                }
-                
-                // 成功後重載頁面以顯示最新狀態
-                window.location.reload();
-
-            } catch (error) {
-                // 如果錯誤不是 'Unauthorized' (因為它會自己處理)，就顯示錯誤訊息
-                if (error.message !== 'Unauthorized') {
-                    console.error('儲存輪播組失敗:', error);
-                    alert(`儲存失敗: ${error.message}`);
-                }
-            } finally {
-                this.classList.remove('is-loading');
-            }
-        });
-    }
-
-    // --- 輪播組 Modal 內部相關的既有函式 (填充、新增、移除、拖曳) ---
-    function populateSelectedImages(groupId) {
-        if(!selectedImagesListDiv) return;
-        selectedImagesListDiv.innerHTML = '';
-        const group = allMediaItemsForJS.find(item => item.id === groupId && item.type === 'carousel_group');
-        if (group && group.image_ids && group.image_ids.length > 0) {
-            group.image_ids.forEach(imageId => {
-                const imgSrc = availableImageSources.find(src => src.id === imageId);
-                if (imgSrc) {
-                    addSelectedImageToDOM(imgSrc.id, imgSrc.url, imgSrc.original_filename || imgSrc.filename);
-                }
-            });
-        } else {
-            selectedImagesListDiv.innerHTML = '<p class="has-text-grey-light has-text-centered p-4">此群組尚無圖片</p>';
-        }
-    }
-    function addSelectedImageToDOM(imageId, imageUrl, imageFilename) {
-        if (selectedImagesListDiv?.querySelector(`[data-image-id="${imageId}"]`)) return;
-        if (selectedImagesListDiv?.querySelector('p.has-text-grey-light')) {
-            selectedImagesListDiv.innerHTML = '';
-        }
-        const entryDiv = document.createElement('div');
-        entryDiv.classList.add('media-item-entry', 'draggable-item');
-        entryDiv.dataset.imageId = imageId;
-        entryDiv.draggable = true;
-
-        const dragHandle = document.createElement('span');
-        dragHandle.innerHTML = '&#x2630; ';
-        dragHandle.style.cursor = 'grab';
-        dragHandle.style.marginRight = '8px';
-
-        const imgPreview = document.createElement('img');
-        imgPreview.src = imageUrl;
-        imgPreview.alt = imageFilename;
-        imgPreview.classList.add('image-thumbnail');
-
-        const fileNameSpan = document.createElement('span');
-        fileNameSpan.textContent = imageFilename;
-        fileNameSpan.classList.add('is-flex-grow-1', 'ml-2');
-
-        const removeButton = document.createElement('button');
-        removeButton.classList.add('button', 'is-small', 'is-danger', 'is-outlined', 'remove-image-from-group-button');
-        removeButton.textContent = '移除';
-        removeButton.dataset.imageId = imageId;
-
-        entryDiv.appendChild(dragHandle);
-        entryDiv.appendChild(imgPreview);
-        entryDiv.appendChild(fileNameSpan);
-        entryDiv.appendChild(removeButton);
-        selectedImagesListDiv?.appendChild(entryDiv);
-
-        entryDiv.addEventListener('dragstart', handleDragStart);
-        entryDiv.addEventListener('dragend', handleDragEnd);
-    }
-    let draggedItem = null;
-    let placeholder = null;
-    function handleDragStart(e) {
-        draggedItem = e.target.closest('.draggable-item');
-        if (!draggedItem) return;
-        if (e.dataTransfer) { e.dataTransfer.setData('text/plain', draggedItem.dataset.imageId); e.dataTransfer.effectAllowed = 'move'; }
-        setTimeout(() => { if(draggedItem) draggedItem.classList.add('dragging'); }, 0);
-    }
-    function handleDragEnd() {
-        if (!draggedItem) return;
-        draggedItem.classList.remove('dragging');
-        draggedItem = null;
-        if (placeholder) { placeholder.remove(); placeholder = null; }
-        selectedImagesListDiv?.classList.remove('drag-over-active');
-    }
-    function handleDragEnter(e) {
-        e.preventDefault();
-        if (draggedItem && selectedImagesListDiv?.contains(draggedItem)) {
-            selectedImagesListDiv?.classList.add('drag-over-active');
-        }
-    }
-    function handleDragLeave(e) {
-        if (!e.currentTarget.contains(e.relatedTarget) ) {
-            selectedImagesListDiv?.classList.remove('drag-over-active');
-            if (placeholder) { placeholder.remove(); placeholder = null; }
-        }
-    }
-    function handleDragOver(e) {
-        e.preventDefault();
-        if (!draggedItem || !selectedImagesListDiv?.contains(draggedItem)) return;
-        const container = selectedImagesListDiv;
-        const afterElement = getDragAfterElement(container, e.clientY);
-        if (!placeholder) {
-            placeholder = document.createElement('div');
-            placeholder.classList.add('drag-placeholder');
-        }
-        if (afterElement) { container.insertBefore(placeholder, afterElement); } 
-        else { container.appendChild(placeholder); }
-    }
-    function handleDrop(e) {
-        e.preventDefault();
-        if (!draggedItem || !selectedImagesListDiv?.contains(draggedItem)) return;
-        if (placeholder?.parentNode === selectedImagesListDiv) {
-            selectedImagesListDiv.insertBefore(draggedItem, placeholder);
-        }
-        if (placeholder) { placeholder.remove(); placeholder = null; }
-        selectedImagesListDiv?.classList.remove('drag-over-active');
-    }
-    function getDragAfterElement(container, y) {
-        const draggableElements = [...container.querySelectorAll('.draggable-item:not(.dragging)')];
-        return draggableElements.reduce((closest, child) => {
-            const box = child.getBoundingClientRect();
-            const offset = y - box.top - box.height / 2;
-            if (offset < 0 && offset > closest.offset) { return { offset: offset, element: child }; } 
-            else { return closest; }
-        }, { offset: Number.NEGATIVE_INFINITY }).element;
-    }
-    selectedImagesListDiv?.addEventListener('dragover', handleDragOver);
-    selectedImagesListDiv?.addEventListener('drop', handleDrop);
-    selectedImagesListDiv?.addEventListener('dragenter', handleDragEnter);
-    selectedImagesListDiv?.addEventListener('dragleave', handleDragLeave);
-    editCarouselGroupModal?.addEventListener('click', function(event) {
-        const target = event.target;
-        if (target.classList.contains('add-image-to-group-button') && !target.disabled) {
-            addSelectedImageToDOM(target.dataset.imageId, target.dataset.imageUrl, target.dataset.imageFilename);
-            target.disabled = true; target.textContent = '已加入'; target.classList.remove('is-success'); target.classList.add('is-light');
-        } else if (target.classList.contains('remove-image-from-group-button')) {
-            const imageIdToRemove = target.dataset.imageId;
-            const itemToRemove = selectedImagesListDiv?.querySelector(`.media-item-entry[data-image-id="${imageIdToRemove}"]`);
-            if (itemToRemove) {
-                itemToRemove.remove();
-                const correspondingAddButton = availableImagesListDiv?.querySelector(`.add-image-to-group-button[data-image-id="${imageIdToRemove}"]`);
-                if (correspondingAddButton) { correspondingAddButton.disabled = false; correspondingAddButton.textContent = '加入'; correspondingAddButton.classList.add('is-success'); correspondingAddButton.classList.remove('is-light'); }
-                if (selectedImagesListDiv && selectedImagesListDiv.children.length === 0) { selectedImagesListDiv.innerHTML = '<p class="has-text-grey-light has-text-centered p-4">此群組尚無圖片</p>'; }
-            }
-        }
-    });
-
-    // =========================================================================
-    // Task 1: 新功能 - 編輯「指派」Modal (New: Edit "Assignment" Modal)
-    // =========================================================================
-    
-    const editAssignmentModal = document.getElementById('editAssignmentModal');
-    const editAssignmentForm = document.getElementById('editAssignmentForm');
-    const editDirectFields = document.getElementById('editDirectAssignFields');
-    const editGroupFields = document.getElementById('editGroupAssignFields');
-    const saveAssignmentChangesButton = document.getElementById('saveAssignmentChangesButton');
-
-    function openEditAssignmentModal(data) {
-        if (!editAssignmentForm) return;
-        editAssignmentForm.reset();
-        editDirectFields.style.display = 'none';
-        editGroupFields.style.display = 'none';
-
-        document.getElementById('editAssignmentId').value = data.itemId;
-        document.getElementById('editAssignmentType').value = data.assignmentType;
-        const sectionName = available_sections_for_js[data.sectionKey] || data.sectionKey;
-        document.getElementById('editSectionKeyDisplay').value = sectionName;
-
-        if (data.assignmentType === 'single_media') {
-            editDirectFields.style.display = 'block';
-            const media = allMediaItemsForJS.find(m => m.id === data.mediaId);
-            document.getElementById('currentMediaFilename').textContent = media ? (media.original_filename || media.filename) : '素材遺失';
-            document.getElementById('editMediaSelect').value = data.mediaId;
-        } else if (data.assignmentType === 'group_reference') {
-            editGroupFields.style.display = 'block';
-            document.getElementById('editCarouselGroupSelect').value = data.groupId;
-            document.getElementById('editOffsetInput').value = data.offset;
-        }
-
-        editAssignmentModal.classList.add('is-active');
-    }
-
-    function closeEditAssignmentModal() {
-        if(editAssignmentModal) editAssignmentModal.classList.remove('is-active');
-    }
-
-    document.querySelectorAll('.edit-assignment-button').forEach(button => {
-        button.addEventListener('click', function() {
-            const data = {
-                itemId: this.dataset.itemId,
-                assignmentType: this.dataset.assignmentType,
-                sectionKey: this.dataset.sectionKey,
-                mediaId: this.dataset.mediaId,
-                groupId: this.dataset.groupId,
-                offset: this.dataset.offset,
-            };
-            openEditAssignmentModal(data);
-        });
-    });
-    
-    // 關閉 Modal 的所有方式
-    editAssignmentModal?.querySelector('.delete')?.addEventListener('click', closeEditAssignmentModal);
-    editAssignmentModal?.querySelector('#cancelAssignmentChangesButton')?.addEventListener('click', closeEditAssignmentModal);
-    editAssignmentModal?.querySelector('.modal-background')?.addEventListener('click', closeEditAssignmentModal);
-    
-    // 儲存「指派」變更
-    if(saveAssignmentChangesButton) {
-        saveAssignmentChangesButton.addEventListener('click', async function() {
-            this.classList.add('is-loading');
-            const assignmentId = document.getElementById('editAssignmentId').value;
-            const assignmentType = document.getElementById('editAssignmentType').value;
-            
-            let payload = {};
-            if (assignmentType === 'single_media') {
-                payload.media_id = document.getElementById('editMediaSelect').value;
-                if (!payload.media_id) {
-                     alert("請選擇一個新的媒體素材。");
-                     this.classList.remove('is-loading');
-                     return;
-                }
-            } else {
-                payload.group_id = document.getElementById('editCarouselGroupSelect').value;
-                payload.offset = document.getElementById('editOffsetInput').value;
-            }
-
-            try {
-                // **認證修改**: 使用 fetchWithAuth
-                const response = await fetchWithAuth(`/api/assignments/${assignmentId}`, {
-                    method: 'PUT', 
-                    body: JSON.stringify(payload)
-                });
-
-                if (!response.ok) {
-                    const err = await response.json();
-                    throw new Error(err.message || '更新指派失敗');
-                }
-                
-                window.location.reload();
-
-            } catch(error) {
-                if (error.message !== 'Unauthorized') {
-                    alert(`儲存失敗: ${error.message}`);
-                }
-            } finally {
-                 this.classList.remove('is-loading');
-            }
-        });
-    }
-
-
-    // =========================================================================
-    // 既有功能：主表單欄位動態顯示 (Existing: Main Form Dynamic Fields)
-    // =========================================================================
-    const mediaTypeSelect = document.getElementById('mediaTypeSelect');
-    const sectionKeyField = document.getElementById('sectionKeyField');
-    const fileUploadField = document.getElementById('fileUploadField');
-    const carouselGroupField = document.getElementById('carouselGroupField');
-    const carouselOffsetField = document.getElementById('carouselOffsetField');
-    const sectionKeySelect = document.getElementById('sectionKeySelect');
-    const fileInputForForm = fileUploadField ? fileUploadField.querySelector('input[type="file"]') : null;
-    const carouselGroupIdSelect = carouselGroupField ? carouselGroupField.querySelector('select[name="carousel_group_id"]') : null;
-    const offsetInput = carouselOffsetField ? carouselOffsetField.querySelector('input[name="offset"]') : null;
-
-    function toggleFormFields() {
-        const selectedType = mediaTypeSelect?.value;
-        if(sectionKeyField) sectionKeyField.style.display = 'none';
-        if(fileUploadField) fileUploadField.style.display = 'none';
-        if(carouselGroupField) carouselGroupField.style.display = 'none';
-        if(carouselOffsetField) carouselOffsetField.style.display = 'none';
-        if(sectionKeySelect) sectionKeySelect.required = false;
-        if(fileInputForForm) fileInputForForm.required = false;
-        if(carouselGroupIdSelect) carouselGroupIdSelect.required = false;
-        if(offsetInput) offsetInput.required = false;
-
-        if (selectedType === 'image' || selectedType === 'video') {
-            if(sectionKeyField) sectionKeyField.style.display = 'block';
-            if(fileUploadField) fileUploadField.style.display = 'block';
-            if(sectionKeySelect) sectionKeySelect.required = true;
-            if(fileInputForForm) fileInputForForm.required = true;
-            if(sectionKeySelect) {
-                sectionKeySelect.innerHTML = '<option value="" disabled selected>-- 請選擇區塊 --</option>';
-                // 明確定義順序，確保下拉選單按照正確順序顯示
-                const sectionOrder = [
-                    'header_video',
-                    'carousel_top_left',
-                    'carousel_top_right',
-                    'carousel_bottom_left',
-                    'carousel_bottom_right',
-                    'footer_content'
-                ];
-                for (const key of sectionOrder) {
-                    if (available_sections_for_js[key]) {
-                        const option = document.createElement('option');
-                        option.value = key;
-                        option.textContent = available_sections_for_js[key];
-                        sectionKeySelect.appendChild(option);
-                    }
-                }
-            }
-        } else if (selectedType === 'group_reference') {
-            if(sectionKeyField) sectionKeyField.style.display = 'block';
-            if(carouselGroupField) carouselGroupField.style.display = 'block';
-            if(carouselOffsetField) carouselOffsetField.style.display = 'block';
-            if(sectionKeySelect) sectionKeySelect.required = true;
-            if(carouselGroupIdSelect) carouselGroupIdSelect.required = true;
-            if(offsetInput) offsetInput.required = true;
-            if(sectionKeySelect) {
-                sectionKeySelect.innerHTML = '<option value="" disabled selected>-- 請選擇輪播區塊 --</option>';
-                // 明確定義輪播區塊的順序
-                const carouselSectionOrder = [
-                    'carousel_top_left',
-                    'carousel_top_right',
-                    'carousel_bottom_left',
-                    'carousel_bottom_right'
-                ];
-                for (const key of carouselSectionOrder) {
-                    if (available_sections_for_js[key]) {
-                        const option = document.createElement('option');
-                        option.value = key;
-                        option.textContent = available_sections_for_js[key];
-                        sectionKeySelect.appendChild(option);
-                    }
-                }
-            }
-        }
-    }
-
-    if (mediaTypeSelect) {
-        mediaTypeSelect.addEventListener('change', toggleFormFields);
-        // 頁面載入時，根據預設選項初始化表單欄位
-        toggleFormFields();
-    }
-
-    // =========================================================================
-    // 新增：處理建立群組表單提交 (New: Handle Create Group Form Submission)
-    // =========================================================================
-    const createGroupForm = document.getElementById('createGroupForm');
-    const createGroupButton = document.getElementById('createGroupButton');
-
-    if (createGroupForm) {
-        createGroupForm.addEventListener('submit', async function(event) {
-            event.preventDefault(); // 阻止表單預設提交
-
-            const groupNameInput = createGroupForm.querySelector('input[name="group_name"]');
-            const groupName = groupNameInput ? groupNameInput.value : '';
-
-            if (!groupName) {
-                alert('群組名稱不能為空。');
-                return;
-            }
-
-            createGroupButton?.classList.add('is-loading');
-            if (createGroupButton) createGroupButton.disabled = true;
-
-            try {
-                const formData = new FormData();
-                formData.append('group_name', groupName);
-
-                const response = await fetchWithAuth('/admin/carousel_group/create', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (!response.ok) {
-                    const err = await response.json();
-                    throw new Error(err.message || '建立群組失敗');
-                }
-
-                // 成功後不需提示，WebSocket 會自動重載頁面
-
-            } catch (error) {
-                if (error.message !== 'Unauthorized') {
-                    alert(`建立群組失敗: ${error.message}`);
-                }
-            } finally {
-                createGroupButton?.classList.remove('is-loading');
-                if (createGroupButton) createGroupButton.disabled = false;
-            }
-        });
-    }
-
-    // =========================================================================
-    // 新增：處理刪除表單提交 (New: Handle Delete Form Submissions)
-    // =========================================================================
-    document.querySelectorAll('.delete-form').forEach(form => {
-        form.addEventListener('submit', async function(event) {
-            event.preventDefault(); // 阻止表單預設提交
-
-            const itemId = this.dataset.itemId;
-            const itemType = this.dataset.itemType;
+    // Delete Forms (using event delegation)
+    document.body.addEventListener('submit', async function(event) {
+        if (event.target.classList.contains('delete-form')) {
+            event.preventDefault();
+            const form = event.target;
+            const itemId = form.dataset.itemId;
+            const itemType = form.dataset.itemType;
             let confirmMessage = '';
             let apiUrl = '';
             let httpMethod = '';
@@ -935,143 +457,31 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (itemType === 'carousel_group') {
                 confirmMessage = '確定要刪除此輪播群組嗎？此操作將同時刪除群組內專屬圖片！';
                 apiUrl = `/admin/carousel_group/delete/${itemId}`;
-                httpMethod = 'POST'; // 後端目前是 POST
+                httpMethod = 'POST';
             } else if (itemType === 'assignment') {
-                confirmMessage = '確定要刪除此指派嗎？';
-                apiUrl = `/api/assignments/${itemId}`; // 假設的 API 端點，後端需要實現
+                confirmMessage = '確定要刪自此指派嗎？';
+                apiUrl = `/api/assignments/${itemId}`;
                 httpMethod = 'DELETE';
-            } else {
-                alert('未知項目類型，無法刪除。');
-                return;
             }
 
-            if (!confirm(confirmMessage)) {
-                return; // 使用者取消刪除
-            }
-
-            // 顯示載入狀態
-            const submitButton = this.querySelector('button[type="submit"]');
-            if (submitButton) {
-                submitButton.classList.add('is-loading');
-                submitButton.disabled = true;
-            }
+            if (!confirm(confirmMessage)) return;
 
             try {
-                const response = await fetchWithAuth(apiUrl, {
-                    method: httpMethod,
-                    // 對於 DELETE 和 POST 請求，如果沒有 body，可以省略 body 屬性
-                    // 對於 POST 請求，如果需要傳遞數據，則需要 body
-                    // 這裡的 POST 請求 (carousel_group delete) 後端不需要 body
-                });
-
+                const response = await fetchWithAuth(apiUrl, { method: httpMethod });
                 if (!response.ok) {
                     const err = await response.json();
                     throw new Error(err.message || '刪除失敗');
                 }
-
-                // 成功後不需提示，WebSocket 會自動重載頁面
-
+                // On success, fetch new data and re-render
+                fetchDataAndRender();
             } catch (error) {
                 if (error.message !== 'Unauthorized') {
                     alert(`刪除失敗: ${error.message}`);
                 }
-            } finally {
-                if (submitButton) {
-                    submitButton.classList.remove('is-loading');
-                    submitButton.disabled = false;
-                }
             }
-        });
+        }
     });
 
-    // =========================================================================
-    // 新增：群組圖片上傳處理 (New: Group Image Upload Handling)
-    // =========================================================================
-    const groupImageUpload = document.getElementById('groupImageUpload');
-    const uploadToGroupButton = document.getElementById('uploadToGroupButton');
-    const groupUploadFileNameDisplay = document.getElementById('groupUploadFileName');
-    const groupUploadProgressContainer = document.getElementById('groupUploadProgress');
-
-    if (groupImageUpload && uploadToGroupButton) {
-        groupImageUpload.addEventListener('change', () => {
-            if (groupImageUpload.files.length > 0) {
-                uploadToGroupButton.disabled = false;
-                groupUploadFileNameDisplay.textContent = `${groupImageUpload.files.length} 個檔案已選擇`;
-            } else {
-                uploadToGroupButton.disabled = true;
-                groupUploadFileNameDisplay.textContent = '未選擇任何檔案';
-            }
-        });
-
-        uploadToGroupButton.addEventListener('click', async function() {
-            const groupId = document.getElementById('modalGroupId').value;
-            if (!groupId) {
-                alert('無法獲取群組ID，請重新開啟編輯視窗。');
-                return;
-            }
-            if (groupImageUpload.files.length === 0) {
-                alert('請選擇要上傳的圖片。');
-                return;
-            }
-
-            this.classList.add('is-loading');
-            this.disabled = true;
-            if (groupUploadProgressContainer) groupUploadProgressContainer.style.display = 'block';
-
-            const formData = new FormData();
-            for (let i = 0; i < groupImageUpload.files.length; i++) {
-                formData.append('files', groupImageUpload.files[i]);
-            }
-
-            try {
-                const response = await fetchWithAuth(`/admin/carousel_group/upload_images/${groupId}`, {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (!response.ok) {
-                    const err = await response.json();
-                    throw new Error(err.message || '上傳失敗');
-                }
-
-                const result = await response.json();
-                const uploadedImages = result.uploaded_images || [];
-                const currentGroupId = document.getElementById('modalGroupId').value;
-                const currentGroup = allMediaItemsForJS.find(item => item.id === currentGroupId && item.type === 'carousel_group');
-
-                uploadedImages.forEach(newMaterial => {
-                    // 將新上傳的素材添加到全域媒體列表中
-                    allMediaItemsForJS.push(newMaterial);
-                    // 將新上傳的圖片添加到可用圖片來源列表中
-                    availableImageSources.push(newMaterial);
-                    // 如果是當前群組的圖片，添加到已選圖片列表中
-                    if (currentGroup && !currentGroup.image_ids.includes(newMaterial.id)) {
-                        currentGroup.image_ids.push(newMaterial.id);
-                    }
-                });
-
-                // 重新填充可用圖片和已選圖片列表，以顯示最新狀態
-                populateAvailableImages(currentGroupId);
-                populateSelectedImages(currentGroupId);
-
-                // 不再彈出提示和重新載入頁面
-                // alert('圖片上傳成功！');
-                // window.location.reload(); // 重新載入頁面以更新列表和可用圖片
-
-            } catch (error) {
-                if (error.message !== 'Unauthorized') {
-                    alert(`上傳失敗: ${error.message}`);
-                }
-            } finally {
-                this.classList.remove('is-loading');
-                this.disabled = false;
-                if (groupUploadProgressContainer) groupUploadProgressContainer.style.display = 'none';
-                groupImageUpload.value = ''; // 清空檔案選擇
-                groupUploadFileNameDisplay.textContent = '未選擇任何檔案';
-            }
-        });
-    }
+    // Other event listeners (Modals, etc.) would go here
+    // They should also call fetchDataAndRender() on success where appropriate
 });
-
-
-
