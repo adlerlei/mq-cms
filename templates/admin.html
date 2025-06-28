@@ -34,8 +34,8 @@
                 <div class="column is-half">
                     <div class="box">
                         <h2 class="title is-4">新增媒體 / 指派內容</h2>
-                        <form id="uploadForm" action="{{ url_for('add_media_item') }}" method="POST" enctype="multipart/form-data">
-                            <div class="field"><label class="label">操作類型</label><div class="control"><div class="select is-fullwidth"><select name="type" id="mediaTypeSelect" required><option value="image">上傳圖片並指派</option><option value="video">上傳影片並指派</option><option value="carousel_reference">指派輪播組</option></select></div></div></div>
+                        <form id="uploadForm" action="" method="POST" enctype="multipart/form-data">
+                            <div class="field"><label class="label">操作類型</label><div class="control"><div class="select is-fullwidth"><select name="type" id="mediaTypeSelect" required><option value="image">上傳圖片並指派</option><option value="video">上傳影片並指派</option><option value="group_reference">指派輪播組</option></select></div></div></div>
                             <div id="sectionKeyField" class="field" style="display: none;"><label class="label">指派到區塊</label><div class="control"><div class="select is-fullwidth"><select name="section_key" id="sectionKeySelect"></select></div></div></div>
                             <div id="fileUploadField" class="field">
                                 <label class="label">選擇檔案</label>
@@ -137,7 +137,7 @@
                                         <td>{{ available_sections.get(item.section_key, '未知區塊') }}</td>
                                         <td class="actions-cell has-text-right">
                                             
-                                            <form class="delete-form" action="{{ url_for('delete_media_item', item_id_to_delete=item.id) }}" method="POST"><button type="submit" class="button is-small is-danger">刪除指派</button></form>
+                                            <form class="delete-form" data-item-id="{{ item.id }}" data-item-type="assignment" action="" method="POST"><button type="submit" class="button is-small is-danger">刪除指派</button></form>
                                         </td>
                                     </tr>
                                     {% endfor %}
@@ -156,7 +156,7 @@
                                                     data-media-id="{{ item.id }}"
                                                     data-media-type="{{ item.type }}"
                                                     data-media-filename="{{ item.original_filename or item.filename }}">重新指派</button>
-                                            <form class="delete-form" action="{{ url_for('delete_media_item', item_id_to_delete=item.id) }}" method="POST"><button type="submit" class="button is-small is-warning">刪除素材</button></form>
+                                            <form class="delete-form" data-item-id="{{ item.id }}" data-item-type="material" action="" method="POST"><button type="submit" class="button is-small is-warning">刪除素材</button></form>
                                         </td>
                                     </tr>
                                     {% endif %}{% endfor %}
@@ -189,7 +189,7 @@
                                         <td>{{ item.name }}</td><td>{{ item.image_ids | length }}</td>
                                         <td class="actions-cell has-text-right">
                                             <button class="button is-small is-link edit-group-images-button" data-group-id="{{ item.id }}" data-group-name="{{ item.name }}">編輯圖片</button>
-                                            <form class="delete-form" action="{{ url_for('delete_carousel_group', group_id_to_delete=item.id) }}" method="POST"><button type="submit" class="button is-small is-danger">刪除</button></form>
+                                            <form class="delete-form" data-item-id="{{ item.id }}" data-item-type="carousel_group" action="" method="POST"><button type="submit" class="button is-small is-danger">刪除</button></form>
                                         </td>
                                     </tr>
                                     {% endfor %}

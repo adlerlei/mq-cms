@@ -106,22 +106,74 @@ function populateAvailableImages(currentGroupId) {
     }
 }
 
+// =========================================================================
+// 全域變數和函式 (Global Variables and Functions)
+// =========================================================================
+const JWT_TOKEN = localStorage.getItem('jwt_token');
+
+/**
+ * API 請求封裝 (API Request Wrapper)
+ * 一個輔助函數，用於發送帶有 JWT 認證標頭的 fetch 請求。
+ * 它會自動處理 401 (未授權) 錯誤，將使用者登出並重導向。
+ * @param {string} url - The URL to fetch.
+ * @param {object} options - Options for the fetch request (e.g., method, body).
+ * @returns {Promise<Response>} - The fetch response promise.
+ */
+async function fetchWithAuth(url, options = {}) {
+    // 準備請求標頭，加入 Authorization
+    const headers = {
+        ...options.headers,
+        'Authorization': `Bearer ${JWT_TOKEN}`
+    };
+
+    // 如果請求主體不是 FormData，則設定 Content-Type 為 application/json
+    // (fetch 會為 FormData 自動設定正確的 multipart/form-data 標頭)
+    if (!(options.body instanceof FormData)) {
+        headers['Content-Type'] = 'application/json';
+    }
+
+    const response = await fetch(url, { ...options, headers });
+
+    // 檢查 Token 是否失效
+    if (response.status === 401) {
+        localStorage.removeItem('jwt_token');
+        alert('您的登入已逾期或無效，請重新登入。');
+        window.location.href = '/login';
+        // 拋出錯誤以中斷當前的 try...catch 鏈
+        throw new Error('Unauthorized');
+    }
+
+    return response;
+}
+
 // 確保在 DOM 完全載入後執行腳本
 document.addEventListener('DOMContentLoaded', () => {
 
     // =========================================================================
-    // Task 3: 使用者認證與 API 請求處理 (Authentication & API Handling)
+    // WebSocket 連線與自動更新 (WebSocket Connection & Auto-Update)
     // =========================================================================
+    const socket = io();
+    socket.on('connect', () => {
+        console.log('Socket.IO Connected!');
+    });
+    socket.on('media_updated', (data) => {
+        console.log('Media updated message received:', data.message);
+        window.location.reload();
+    });
+    socket.on('settings_updated', (data) => {
+        console.log('Settings updated message received:', data);
+        window.location.reload();
+    });
 
-    const JWT_TOKEN = localStorage.getItem('jwt_token');
+    // =========================================================================
+    // 認證檢查與 UI 顯示 (Authentication Check & UI Display)
+    // =========================================================================
     const authCheckingScreen = document.getElementById('authCheckingScreen');
     const mainContent = document.getElementById('mainContent');
 
     // 路由守衛 (Route Guard): 如果沒有 token，立即重導向到登入頁面
     if (!JWT_TOKEN) {
-        // 假設後端 Flask 的登入頁面路由是 /login
         window.location.href = '/login';
-        // 停止執行此腳本的任何後續程式碼，因為使用者未經授權
         return;
     }
 
@@ -205,7 +257,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 確認重新指派
     confirmReassignButton?.addEventListener('click', async function() {
         const mediaId = document.getElementById('reassignMediaId').value;
-        const mediaType = document.getElementById('reassignMediaType').value;
+        const mediaType = document.getElementById('reassignMediaType').value; // 這裡的 mediaType 其實是 content_source_type
         const sectionKey = reassignSectionSelect.value;
 
         if (!sectionKey) {
@@ -218,11 +270,11 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             // 創建新的指派
             const formData = new FormData();
-            formData.append('type', mediaType);
+            formData.append('type', 'single_media'); // 重新指派本質上是單一媒體指派
             formData.append('section_key', sectionKey);
             formData.append('media_id', mediaId);
 
-            const response = await fetchWithAuth('/admin/reassign', {
+            const response = await fetchWithAuth('/api/assignments', {
                 method: 'POST',
                 body: formData
             });
@@ -244,40 +296,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    /**
-     * API 請求封裝 (API Request Wrapper)
-     * 一個輔助函數，用於發送帶有 JWT 認證標頭的 fetch 請求。
-     * 它會自動處理 401 (未授權) 錯誤，將使用者登出並重導向。
-     * @param {string} url - The URL to fetch.
-     * @param {object} options - Options for the fetch request (e.g., method, body).
-     * @returns {Promise<Response>} - The fetch response promise.
-     */
-    async function fetchWithAuth(url, options = {}) {
-        // 準備請求標頭，加入 Authorization
-        const headers = {
-            ...options.headers,
-            'Authorization': `Bearer ${JWT_TOKEN}`
-        };
-
-        // 如果請求主體不是 FormData，則設定 Content-Type 為 application/json
-        // (fetch 會為 FormData 自動設定正確的 multipart/form-data 標頭)
-        if (!(options.body instanceof FormData)) {
-            headers['Content-Type'] = 'application/json';
-        }
-
-        const response = await fetch(url, { ...options, headers });
-
-        // 檢查 Token 是否失效
-        if (response.status === 401) {
-            localStorage.removeItem('jwt_token');
-            alert('您的登入已逾期或無效，請重新登入。');
-            window.location.href = '/login';
-            // 拋出錯誤以中斷當前的 try...catch 鏈
-            throw new Error('Unauthorized');
-        }
-
-        return response;
-    }
     
     // 登出按鈕事件監聽
     const logoutButton = document.getElementById('logoutButton');
@@ -372,7 +390,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (uploadForm) {
-        uploadForm.addEventListener('submit', function(event) {
+        uploadForm.addEventListener('submit', async function(event) {
             event.preventDefault(); // 阻止表單預設提交
 
             if (!uploadForm.checkValidity()) {
@@ -388,52 +406,78 @@ document.addEventListener('DOMContentLoaded', () => {
             if(uploadFormSubmitButton) uploadFormSubmitButton.disabled = true;
 
             const formData = new FormData(uploadForm);
+            const selectedType = mediaTypeSelect?.value; // 獲取選定的操作類型
+            console.log('Selected Type:', selectedType);
+
+            // 根據選定的類型調整 FormData
+            if (selectedType === 'image' || selectedType === 'video') {
+                console.log('Entering image/video upload logic');
+                // 對於直接上傳並指派，後端需要知道 section_key
+                formData.append('section_key', sectionKeySelect.value);
+                formData.append('type', selectedType); // 傳遞媒體類型給後端
+            } else if (selectedType === 'group_reference') {
+                console.log('Entering carousel assignment logic');
+                // 對於指派輪播組，我們將呼叫 /api/assignments
+                // 這裡不需要處理檔案上傳，所以直接呼叫 create_assignment
+                try {
+                    const response = await fetchWithAuth('/api/assignments', {
+                        method: 'POST',
+                        body: formData // FormData 包含 carousel_group_id, offset, section_key
+                    });
+
+                    if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.message || '指派輪播組失敗');
+                }
+                // 成功後不需提示，WebSocket 會自動重載頁面
+                } catch (error) {
+                    if (error.message !== 'Unauthorized') {
+                        alert(`指派輪播組失敗: ${error.message}`);
+                    }
+                } finally {
+                    resetUploadFormState();
+                    return; // 確保在處理完畢後立即返回，不執行後續的檔案上傳邏輯
+                }
+                return; // 處理完畢，不繼續執行檔案上傳邏輯
+            }
+
+            // 檔案上傳邏輯 (改用 XMLHttpRequest 以支援進度條)
             const xhr = new XMLHttpRequest();
-
-            // 上傳進度監聽
-            xhr.upload.addEventListener('progress', function(e) {
-                if (e.lengthComputable) {
-                    const percentage = Math.round((e.loaded / e.total) * 100);
-                    if(progressBar) progressBar.value = percentage;
-                    if(progressText) progressText.textContent = percentage + '%';
-                }
-            });
-
-            // 上傳完成後的回呼
-            xhr.addEventListener('load', function() {
-                resetUploadFormState();
-                
-                // **認證修改**: 處理 401 錯誤
-                if (xhr.status === 401) {
-                    localStorage.removeItem('jwt_token');
-                    alert('您的登入已逾期或無效，請重新登入。');
-                    window.location.href = '/login';
-                    return;
-                }
-
-                if (xhr.status >= 200 && xhr.status < 300) {
-                    console.log('操作成功 (uploadForm)，正在重新載入頁面...');
-                    window.location.reload();
-                } else {
-                    console.error('操作失敗 (uploadForm):', xhr.status, xhr.responseText);
-                    alert(`操作失敗: ${xhr.status} - ${xhr.responseText || '未知錯誤'}`);
-                }
-            });
-            
-            xhr.addEventListener('error', function() {
-                console.error('上傳過程中發生網路錯誤。');
-                alert('上傳過程中發生網路錯誤，請檢查您的網路連線。');
-                resetUploadFormState(2000);
-            });
-
-            xhr.addEventListener('abort', function() {
-                console.warn('上傳已中止。');
-                resetUploadFormState(1000);
-            });
-            
-            xhr.open('POST', uploadForm.action, true);
-            // **認證修改**: 在 XHR 請求中加入 Authorization 標頭
+            xhr.open('POST', '/api/materials', true);
             xhr.setRequestHeader('Authorization', `Bearer ${JWT_TOKEN}`);
+
+            // 上傳進度事件
+            xhr.upload.onprogress = function(event) {
+                if (event.lengthComputable) {
+                    const percentComplete = (event.loaded / event.total) * 100;
+                    if(progressBar) progressBar.value = percentComplete;
+                    if(progressText) progressText.textContent = Math.round(percentComplete) + '%';
+                }
+            };
+
+            // 上傳完成事件
+            xhr.onload = function() {
+                resetUploadFormState();
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    // 成功後，不需要做任何事，因為 WebSocket 會觸發頁面重載
+                    console.log('Upload successful, waiting for WebSocket reload.');
+                } else {
+                    // 處理錯誤
+                    try {
+                        const err = JSON.parse(xhr.responseText);
+                        alert(`上傳失敗: ${err.message || '伺服器返回錯誤'}`);
+                    } catch (e) {
+                        alert(`上傳失敗: ${xhr.statusText}`);
+                    }
+                }
+            };
+
+            // 上傳錯誤事件
+            xhr.onerror = function() {
+                resetUploadFormState();
+                alert('上傳過程中發生網路錯誤。');
+            };
+
             xhr.send(formData);
         });
     }
@@ -717,8 +761,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             try {
                 // **認證修改**: 使用 fetchWithAuth
-                const response = await fetchWithAuth(`/api/assignment/update/${assignmentId}`, {
-                    method: 'POST', // 或 'PUT'，依後端設計
+                const response = await fetchWithAuth(`/api/assignments/${assignmentId}`, {
+                    method: 'PUT', 
                     body: JSON.stringify(payload)
                 });
 
@@ -789,7 +833,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
             }
-        } else if (selectedType === 'carousel_reference') {
+        } else if (selectedType === 'group_reference') {
             if(sectionKeyField) sectionKeyField.style.display = 'block';
             if(carouselGroupField) carouselGroupField.style.display = 'block';
             if(carouselOffsetField) carouselOffsetField.style.display = 'block';
@@ -822,241 +866,212 @@ document.addEventListener('DOMContentLoaded', () => {
         // 頁面載入時，根據預設選項初始化表單欄位
         toggleFormFields();
     }
-});
 
-// --- 請將以下程式碼新增到 admin.js 的最末端 ---
+    // =========================================================================
+    // 新增：處理建立群組表單提交 (New: Handle Create Group Form Submission)
+    // =========================================================================
+    const createGroupForm = document.getElementById('createGroupForm');
+    const createGroupButton = document.getElementById('createGroupButton');
 
-document.addEventListener('DOMContentLoaded', () => {
-    // 監聽整個頁面的表單提交事件
-    document.body.addEventListener('submit', function(event) {
+    if (createGroupForm) {
+        createGroupForm.addEventListener('submit', async function(event) {
+            event.preventDefault(); // 阻止表單預設提交
 
-        // 處理建立群組表單
-        if (event.target && event.target.matches('#createGroupForm')) {
-            // 1. 阻止表單用傳統方式送出
-            event.preventDefault();
+            const groupNameInput = createGroupForm.querySelector('input[name="group_name"]');
+            const groupName = groupNameInput ? groupNameInput.value : '';
 
-            const form = event.target;
-            const formData = new FormData(form);
-            const url = form.action;
-            const token = localStorage.getItem('jwt_token');
-            const submitButton = form.querySelector('#createGroupButton');
-
-            // 2. 檢查 Token 是否存在
-            if (!token) {
-                alert('認證已過期或不存在，請重新登入。');
-                window.location.href = '/login';
+            if (!groupName) {
+                alert('群組名稱不能為空。');
                 return;
             }
 
-            // 3. 顯示載入狀態
+            createGroupButton?.classList.add('is-loading');
+            if (createGroupButton) createGroupButton.disabled = true;
+
+            try {
+                const formData = new FormData();
+                formData.append('group_name', groupName);
+
+                const response = await fetchWithAuth('/admin/carousel_group/create', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.message || '建立群組失敗');
+                }
+
+                // 成功後不需提示，WebSocket 會自動重載頁面
+
+            } catch (error) {
+                if (error.message !== 'Unauthorized') {
+                    alert(`建立群組失敗: ${error.message}`);
+                }
+            } finally {
+                createGroupButton?.classList.remove('is-loading');
+                if (createGroupButton) createGroupButton.disabled = false;
+            }
+        });
+    }
+
+    // =========================================================================
+    // 新增：處理刪除表單提交 (New: Handle Delete Form Submissions)
+    // =========================================================================
+    document.querySelectorAll('.delete-form').forEach(form => {
+        form.addEventListener('submit', async function(event) {
+            event.preventDefault(); // 阻止表單預設提交
+
+            const itemId = this.dataset.itemId;
+            const itemType = this.dataset.itemType;
+            let confirmMessage = '';
+            let apiUrl = '';
+            let httpMethod = '';
+
+            if (itemType === 'material') {
+                confirmMessage = '確定要刪除此素材嗎？此操作不可逆！';
+                apiUrl = `/api/materials/${itemId}`;
+                httpMethod = 'DELETE';
+            } else if (itemType === 'carousel_group') {
+                confirmMessage = '確定要刪除此輪播群組嗎？此操作將同時刪除群組內專屬圖片！';
+                apiUrl = `/admin/carousel_group/delete/${itemId}`;
+                httpMethod = 'POST'; // 後端目前是 POST
+            } else if (itemType === 'assignment') {
+                confirmMessage = '確定要刪除此指派嗎？';
+                apiUrl = `/api/assignments/${itemId}`; // 假設的 API 端點，後端需要實現
+                httpMethod = 'DELETE';
+            } else {
+                alert('未知項目類型，無法刪除。');
+                return;
+            }
+
+            if (!confirm(confirmMessage)) {
+                return; // 使用者取消刪除
+            }
+
+            // 顯示載入狀態
+            const submitButton = this.querySelector('button[type="submit"]');
             if (submitButton) {
                 submitButton.classList.add('is-loading');
                 submitButton.disabled = true;
             }
 
-            // 4. 使用 fetch API 發送帶有認證標頭的請求
-            fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                },
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    console.log('群組建立成功！');
-                    window.location.reload(); // 重新整理頁面以顯示最新列表
-                } else {
-                    alert(`建立失敗: ${data.message || '未知錯誤'}`);
+            try {
+                const response = await fetchWithAuth(apiUrl, {
+                    method: httpMethod,
+                    // 對於 DELETE 和 POST 請求，如果沒有 body，可以省略 body 屬性
+                    // 對於 POST 請求，如果需要傳遞數據，則需要 body
+                    // 這裡的 POST 請求 (carousel_group delete) 後端不需要 body
+                });
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.message || '刪除失敗');
                 }
-            })
-            .catch(error => {
-                console.error('建立群組時發生錯誤:', error);
-                alert('建立失敗，請檢查網絡連線或查看控制台日誌。');
-            })
-            .finally(() => {
-                // 5. 恢復按鈕狀態
+
+                // 成功後不需提示，WebSocket 會自動重載頁面
+
+            } catch (error) {
+                if (error.message !== 'Unauthorized') {
+                    alert(`刪除失敗: ${error.message}`);
+                }
+            } finally {
                 if (submitButton) {
                     submitButton.classList.remove('is-loading');
                     submitButton.disabled = false;
                 }
-            });
-        }
-
-        // 判斷被提交的是否為我們標記的刪除表單
-        else if (event.target && event.target.matches('form.delete-form')) {
-            
-            // 1. 阻止表單用傳統方式送出
-            event.preventDefault(); 
-
-            const form = event.target;
-            const url = form.action;
-            const token = localStorage.getItem('jwt_token'); // 從瀏覽器儲存中獲取 Token
-
-            // 2. 檢查 Token 是否存在
-            if (!token) {
-                alert('認證已過期或不存在，請重新登入。');
-                window.location.href = '/login'; // 重定向到登入頁面
-                return;
-            }
-
-            // 3. 檢查確認對話框的結果
-            // 由於我們攔截了表單提交，需要手動處理確認邏輯
-            const submitButton = form.querySelector('button[type="submit"]');
-            let confirmMessage = '';
-
-            if (submitButton && submitButton.textContent.includes('刪除指派')) {
-                confirmMessage = '確定刪除此指派?';
-            } else if (submitButton && submitButton.textContent.includes('刪除素材')) {
-                confirmMessage = '確定刪除此素材?';
-            } else if (submitButton && submitButton.textContent.includes('刪除')) {
-                // 對於輪播群組刪除
-                confirmMessage = '您確定要刪除這個輪播圖片組嗎？組本身會被刪除，引用此組的區塊指派也會被移除，但組內的圖片素材不會被刪除。';
-            }
-
-            // 顯示確認對話框
-            if (confirmMessage && !confirm(confirmMessage)) {
-                // 用戶點擊取消，不執行刪除
-                return;
-            }
-
-            // 4. 使用 fetch API 發送帶有認證標頭的請求
-            fetch(url, {
-                method: 'POST',
-                headers: {
-                    // 這就是解決問題的關鍵：在請求中加入認證 Token
-                    'Authorization': `Bearer ${token}`
-                }
-            })
-            .then(response => {
-                if (response.ok) {
-                    // 如果伺服器回應成功 (status 200-299)
-                    console.log('刪除成功！');
-                    window.location.reload(); // 重新整理頁面以顯示最新列表
-                } else {
-                    // 如果伺服器回應失敗
-                    response.json().then(data => {
-                        alert(`刪除失敗: ${data.message || '未知錯誤'}`);
-                    });
-                }
-            })
-            .catch(error => {
-                // 處理網絡連線等問題
-                console.error('刪除操作時發生網絡錯誤:', error);
-                alert('刪除失敗，請檢查網絡連線或查看控制台日誌。');
-            });
-        }
-    });
-});
-
-// 在 admin.js 中新增以下功能
-
-// 群組專屬上傳功能
-document.addEventListener('DOMContentLoaded', () => {
-    // 群組圖片上傳相關元素
-    const groupImageUpload = document.getElementById('groupImageUpload');
-    const groupUploadFileName = document.getElementById('groupUploadFileName');
-    const uploadToGroupButton = document.getElementById('uploadToGroupButton');
-    const groupUploadProgress = document.getElementById('groupUploadProgress');
-    
-    // 檔案選擇事件
-    if (groupImageUpload) {
-        groupImageUpload.addEventListener('change', function() {
-            const files = this.files;
-            if (files.length > 0) {
-                if (files.length === 1) {
-                    groupUploadFileName.textContent = files[0].name;
-                } else {
-                    groupUploadFileName.textContent = `已選擇 ${files.length} 個檔案`;
-                }
-                uploadToGroupButton.disabled = false;
-            } else {
-                groupUploadFileName.textContent = '未選擇任何檔案';
-                uploadToGroupButton.disabled = true;
             }
         });
-    }
-    
-    // 上傳按鈕事件
-    if (uploadToGroupButton) {
+    });
+
+    // =========================================================================
+    // 新增：群組圖片上傳處理 (New: Group Image Upload Handling)
+    // =========================================================================
+    const groupImageUpload = document.getElementById('groupImageUpload');
+    const uploadToGroupButton = document.getElementById('uploadToGroupButton');
+    const groupUploadFileNameDisplay = document.getElementById('groupUploadFileName');
+    const groupUploadProgressContainer = document.getElementById('groupUploadProgress');
+
+    if (groupImageUpload && uploadToGroupButton) {
+        groupImageUpload.addEventListener('change', () => {
+            if (groupImageUpload.files.length > 0) {
+                uploadToGroupButton.disabled = false;
+                groupUploadFileNameDisplay.textContent = `${groupImageUpload.files.length} 個檔案已選擇`;
+            } else {
+                uploadToGroupButton.disabled = true;
+                groupUploadFileNameDisplay.textContent = '未選擇任何檔案';
+            }
+        });
+
         uploadToGroupButton.addEventListener('click', async function() {
-            const files = groupImageUpload.files;
             const groupId = document.getElementById('modalGroupId').value;
-            
-            if (!files || files.length === 0) {
-                alert('請先選擇要上傳的圖片');
-                return;
-            }
-            
             if (!groupId) {
-                alert('群組ID錯誤');
+                alert('無法獲取群組ID，請重新開啟編輯視窗。');
                 return;
             }
-            
-            // 顯示上傳進度
+            if (groupImageUpload.files.length === 0) {
+                alert('請選擇要上傳的圖片。');
+                return;
+            }
+
             this.classList.add('is-loading');
             this.disabled = true;
-            groupUploadProgress.style.display = 'block';
-            
+            if (groupUploadProgressContainer) groupUploadProgressContainer.style.display = 'block';
+
+            const formData = new FormData();
+            for (let i = 0; i < groupImageUpload.files.length; i++) {
+                formData.append('files', groupImageUpload.files[i]);
+            }
+
             try {
-                const formData = new FormData();
-                for (let i = 0; i < files.length; i++) {
-                    formData.append('files', files[i]);
-                }
-                
-                const token = localStorage.getItem('jwt_token');
-                const response = await fetch(`/admin/carousel_group/upload_images/${groupId}`, {
+                const response = await fetchWithAuth(`/admin/carousel_group/upload_images/${groupId}`, {
                     method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    },
                     body: formData
                 });
-                
-                console.log('Response status:', response.status);
-                console.log('Response ok:', response.ok);
-                
-                const result = await response.json();
-                console.log('Response result:', result);
-                
-                if (response.ok && result.success) {
-                    // 更新全域變數
-                    if (result.uploaded_images) {
-                        result.uploaded_images.forEach(img => {
-                            allMediaItemsForJS.push(img);
-                            availableImageSources.push(img);
-                        });
-                    }
-                    
-                    // 重新填充可用圖片列表
-                    populateAvailableImages(groupId);
-                    
-                    // 清空上傳表單
-                    groupImageUpload.value = '';
-                    groupUploadFileName.textContent = '未選擇任何檔案';
-                    
-                    // 可選：添加一個簡短的視覺反饋
-                    console.log(`成功上傳 ${result.uploaded_images ? result.uploaded_images.length : 0} 張圖片`);
-                } else {
-                    alert(`上傳失敗: ${result.message}`);
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.message || '上傳失敗');
                 }
-                
+
+                const result = await response.json();
+                const uploadedImages = result.uploaded_images || [];
+                const currentGroupId = document.getElementById('modalGroupId').value;
+                const currentGroup = allMediaItemsForJS.find(item => item.id === currentGroupId && item.type === 'carousel_group');
+
+                uploadedImages.forEach(newMaterial => {
+                    // 將新上傳的素材添加到全域媒體列表中
+                    allMediaItemsForJS.push(newMaterial);
+                    // 將新上傳的圖片添加到可用圖片來源列表中
+                    availableImageSources.push(newMaterial);
+                    // 如果是當前群組的圖片，添加到已選圖片列表中
+                    if (currentGroup && !currentGroup.image_ids.includes(newMaterial.id)) {
+                        currentGroup.image_ids.push(newMaterial.id);
+                    }
+                });
+
+                // 重新填充可用圖片和已選圖片列表，以顯示最新狀態
+                populateAvailableImages(currentGroupId);
+                populateSelectedImages(currentGroupId);
+
+                // 不再彈出提示和重新載入頁面
+                // alert('圖片上傳成功！');
+                // window.location.reload(); // 重新載入頁面以更新列表和可用圖片
+
             } catch (error) {
-                console.error('上傳錯誤:', error);
-                // 更詳細的錯誤處理
-                if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
-                    alert('網絡連線錯誤，請檢查網絡設置');
-                } else {
+                if (error.message !== 'Unauthorized') {
                     alert(`上傳失敗: ${error.message}`);
                 }
             } finally {
-                // 隱藏進度條，恢復按鈕狀態
                 this.classList.remove('is-loading');
                 this.disabled = false;
-                uploadToGroupButton.disabled = true;
-                groupUploadProgress.style.display = 'none';
+                if (groupUploadProgressContainer) groupUploadProgressContainer.style.display = 'none';
+                groupImageUpload.value = ''; // 清空檔案選擇
+                groupUploadFileNameDisplay.textContent = '未選擇任何檔案';
             }
         });
     }
 });
+
+
+
