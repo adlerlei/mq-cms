@@ -1,5 +1,6 @@
 # ----------------------------------------------------------------
 # --- 最終、完整、可運行的整合版 app.py ---
+# --- v2: 已將 query.get() 更新為 db.session.get() ---
 # ----------------------------------------------------------------
 from flask import Flask, jsonify, render_template, request, redirect, url_for
 from flask_cors import CORS
@@ -379,7 +380,7 @@ def upload_material(current_user):
 def delete_material(current_user, item_id_to_delete):
     """處理刪除媒體素材的請求"""
     try:
-        material_to_delete = Material.query.get(item_id_to_delete)
+        material_to_delete = db.session.get(Material, item_id_to_delete)
         if not material_to_delete:
             return jsonify({'success': False, 'message': '找不到要刪除的素材'}), 404
 
@@ -410,7 +411,7 @@ def delete_material(current_user, item_id_to_delete):
 def delete_assignment(current_user, assignment_id_to_delete):
     """處理刪除內容指派的請求"""
     try:
-        assignment_to_delete = Assignment.query.get(assignment_id_to_delete)
+        assignment_to_delete = db.session.get(Assignment, assignment_id_to_delete)
         if not assignment_to_delete:
             return jsonify({'success': False, 'message': '找不到要刪除的指派'}), 404
 
@@ -433,7 +434,7 @@ def update_global_settings(current_user):
     try:
         # 遍歷收到的設定並更新資料庫
         for key, value in data.items():
-            setting_to_update = Setting.query.get(key)
+            setting_to_update = db.session.get(Setting, key)
             if setting_to_update:
                 setting_to_update.value = str(value)
         
@@ -475,7 +476,7 @@ def create_carousel_group(current_user):
 def delete_carousel_group(current_user, group_id_to_delete):
     """處理刪除輪播群組的請求，從資料庫刪除"""
     try:
-        group_to_delete = CarouselGroup.query.get(group_id_to_delete)
+        group_to_delete = db.session.get(CarouselGroup, group_id_to_delete)
         if not group_to_delete:
             return jsonify({'success': False, 'message': '找不到要刪除的群組'}), 404
 
@@ -514,7 +515,7 @@ def delete_carousel_group(current_user, group_id_to_delete):
 def upload_images_to_group(current_user, group_id):
     """處理群組專屬的多圖片上傳，寫入資料庫"""
     try:
-        group = CarouselGroup.query.get(group_id)
+        group = db.session.get(CarouselGroup, group_id)
         if not group:
             return jsonify({'success': False, 'message': '找不到指定的群組'}), 404
 
@@ -589,7 +590,7 @@ def update_carousel_group_images(current_user, group_id):
         return jsonify({'success': False, 'message': '請求無效'}), 400
 
     try:
-        group = CarouselGroup.query.get(group_id)
+        group = db.session.get(CarouselGroup, group_id)
         if not group:
             return jsonify({'success': False, 'message': '找不到群組'}), 404
 
@@ -599,7 +600,7 @@ def update_carousel_group_images(current_user, group_id):
         # 建立新的關聯，並儲存順序
         for index, image_id in enumerate(data['image_ids']):
             # 確保圖片存在
-            if Material.query.get(image_id):
+            if db.session.get(Material, image_id):
                 new_assoc = GroupImageAssociation(group_id=group_id, material_id=image_id, order=index)
                 db.session.add(new_assoc)
         
