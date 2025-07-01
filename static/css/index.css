@@ -1,135 +1,103 @@
-/* 重置和基本樣式 */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        /* 隱藏滾動條，但保留滾動功能 */
-        body {
-            overflow: -moz-scrollbars-none;
-            -ms-overflow-style: none;
-            background-color: #000;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-        
-        body::-webkit-scrollbar {
-            display: none;
-        }
-        
-        /* 頁首影片容器樣式 */
-        #header-content-container {
-            width: 1080px;
-            flex: 1;
-            min-height: 0;
-            overflow: hidden;
-            position: relative;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background-color: #000;
-            margin-bottom: 0;
-        }
-        
-        #header-content-container .carousel-container {
-            width: 100%;
-            height: 100%;
-        }
-        
-        #header-content-container video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
+/* index.css (等比例縮放版) */
 
-        /* 頁首圖片樣式 - 與影片相同的縮放行為 */
-        #header-content-container img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-     
-        /* 中間四個區塊的網格佈局 */
-        .middle-grid {
-            width: 1080px;
-            display: flex;
-            flex-direction: column;
-            margin-top: 0;
-            margin-bottom: 0;
-        }
-        
-        .grid-row {
-            display: flex;
-            width: 1080px;
-        }
-        
-        /* 輪播容器樣式 - 每個區塊 540x554 */
-        .carousel-container {
-            width: 540px;
-            height: 554px;
-            overflow: hidden;
-            position: relative;
-        }
-        
-        .carousel-inner {
-            display: flex;
-            transition: transform 0.5s ease;
-            height: 100%;
-        }
-        
-        .carousel-item {
-            flex: 0 0 100%;
-            height: 100%;
-        }
-        
-        /* 為中間四個區塊的圖片添加特定比例 */
-        .carousel-image-container {
-            position: relative;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-        }
-        
-        .carousel-image-container img {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        
-        /* 頁尾影片容器樣式 */
-        #footer-content-container {
-            width: 1080px;
-            height: 192px;
-            overflow: hidden;
-            position: relative;
-            background-color: #000;
-        }
-        
-        #footer-content-container .carousel-container {
-            width: 100%;
-            height: 100%;
-        }
-        
-        #footer-content-container video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
+/* 1. 全域與基礎設定
+-------------------------------------------------- */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
 
-        /* 頁尾圖片樣式 - 與影片相同的縮放行為 */
-        #footer-content-container img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
+body {
+    background-color: #000;
+    /* 移除 flexbox 佈局，讓內容自然流動 */
+}
 
-        .footer-video {
-            width: 1080px;
-            height: 192px;
-            object-fit: cover;
-        }
+/* 隱藏滾動條 */
+body::-webkit-scrollbar { display: none; }
+body { -ms-overflow-style: none; scrollbar-width: none; }
+
+/*
+ * 核心邏輯：
+ * 我們的設計稿基準寬度是 1080px。
+ * 我們將所有 px 單位換算成 vw 單位。
+ * 換算公式: (目標px值 / 1080) * 100vw
+ */
+
+/* 2. 頁首、中間、頁尾容器
+ * 所有容器的寬度都設定為 100vw，即佔滿螢幕寬度。
+-------------------------------------------------- */
+#header-content-container,
+.middle-grid,
+#footer-content-container {
+    width: 100vw; /* 佔滿螢幕寬度 */
+}
+
+/* 3. 頁首區塊
+ * 假設在 1920px 的總高度中，頁首高度為 620px (1920 - 554*2 - 192)
+ * 高度也用 vw 來設定，以維持長寬比。
+ * 高度 = (620 / 1080) * 100vw = 57.4vw
+-------------------------------------------------- */
+#header-content-container {
+    height: 57.4074vw; /* 保持長寬比 */
+    position: relative;
+    overflow: hidden;
+}
+
+/* 4. 中間四宮格區塊
+-------------------------------------------------- */
+.middle-grid {
+    /* 這個容器只作為包裹層，不需要設定尺寸 */
+    font-size: 0; /* 消除 flex/inline-block 子元素間的微小間隙 */
+}
+
+.grid-row {
+    display: flex; /* 讓內部的 container 水平排列 */
+    width: 100vw;
+}
+
+.carousel-container {
+    /* 寬度: (540px / 1080) * 100vw = 50vw */
+    width: 50vw;
+    /* 高度: (554px / 1080) * 100vw = 51.296vw */
+    height: 51.2963vw;
+    overflow: hidden;
+    position: relative;
+}
+
+.carousel-inner {
+    display: flex;
+    transition: transform 0.5s ease;
+    height: 100%;
+}
+
+.carousel-item {
+    flex: 0 0 100%;
+    height: 100%;
+}
+
+
+/* 5. 頁尾區塊
+-------------------------------------------------- */
+#footer-content-container {
+    /* 高度: (192px / 1080) * 100vw = 17.777vw */
+    height: 17.7778vw;
+    position: relative;
+    overflow: hidden;
+}
+
+/* 6. 所有媒體元素 (影片/圖片)
+ * 讓它們填滿各自的容器
+-------------------------------------------------- */
+#header-content-container video,
+#header-content-container img,
+.carousel-item img,
+#footer-content-container video,
+#footer-content-container img {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* 保持裁切填滿效果 */
+}

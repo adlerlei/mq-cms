@@ -1047,4 +1047,4 @@ if __name__ == '__main__':
     with app.app_context():
         if not os.path.exists(UPLOAD_FOLDER): os.makedirs(UPLOAD_FOLDER, mode=0o755)
         db.create_all()
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True, use_reloader=True)
+    socketio.run(app, host='0.0.0.0', port=5003, debug=True, use_reloader=True)
