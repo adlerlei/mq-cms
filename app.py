@@ -314,10 +314,71 @@ def create_assignment(current_user):
         print(f"建立指派時發生錯誤: {e}")
         return jsonify({'success': False, 'message': '建立指派時發生伺服器錯誤。'}), 500
 
+@app.route('/api/materials', methods=['GET'])
+def get_materials():
+    """獲取所有媒體素材"""
+    try:
+        materials = Material.query.all()
+        materials_data = []
+        for material in materials:
+            materials_data.append({
+                'id': material.id,
+                'original_filename': material.original_filename,
+                'filename': material.filename,
+                'type': material.type,
+                'url': material.url,
+                'source': material.source
+            })
+        return jsonify({'success': True, 'data': materials_data})
+    except Exception as e:
+        print(f"獲取素材時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '獲取素材時發生伺服器錯誤。'}), 500
+
+@app.route('/api/materials/<material_id>', methods=['GET'])
+def get_material(material_id):
+    """獲取單個媒體素材詳細資訊"""
+    try:
+        material = db.session.get(Material, material_id)
+        if not material:
+            return jsonify({'success': False, 'message': '找不到指定的素材'}), 404
+            
+        material_data = {
+            'id': material.id,
+            'original_filename': material.original_filename,
+            'filename': material.filename,
+            'type': material.type,
+            'url': material.url,
+            'source': material.source,
+            'assignments': [],
+            'groups': []
+        }
+        
+        # 添加指派資訊
+        for assignment in material.assignments:
+            material_data['assignments'].append({
+                'id': assignment.id,
+                'section_key': assignment.section_key,
+                'content_source_type': assignment.content_source_type
+            })
+            
+        # 添加群組資訊
+        for assoc in material.group_associations:
+            if assoc.group:
+                material_data['groups'].append({
+                    'id': assoc.group.id,
+                    'name': assoc.group.name,
+                    'order': assoc.order
+                })
+                
+        return jsonify({'success': True, 'data': material_data})
+    except Exception as e:
+        print(f"獲取素材詳細資訊時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '獲取素材詳細資訊時發生伺服器錯誤。'}), 500
+
 @app.route('/api/materials', methods=['POST'])
 @token_required
 def upload_material(current_user):
-    """處理上傳新的媒體檔案，並可選擇性地直接指派。"""
+    """上傳新的媒體檔案，並可選擇性地直接指派"""
     if 'file' not in request.files:
         return jsonify({'success': False, 'message': '未找到上傳的檔案'}), 400
 
@@ -366,8 +427,17 @@ def upload_material(current_user):
         # 一次性提交所有變更 (素材和指派)
         db.session.commit()
 
+        material_data = {
+            'id': new_material.id,
+            'original_filename': new_material.original_filename,
+            'filename': new_material.filename,
+            'type': new_material.type,
+            'url': new_material.url,
+            'source': new_material.source
+        }
+
         socketio.emit('media_updated', {'message': '素材已成功上傳！'})
-        return jsonify({'success': True, 'message': '上傳成功', 'material': {'id': new_material.id, 'url': new_material.url}})
+        return jsonify({'success': True, 'message': '上傳成功', 'data': material_data}), 201
 
     except Exception as e:
         db.session.rollback()
@@ -406,10 +476,132 @@ def delete_material(current_user, item_id_to_delete):
         print(f"刪除素材時發生錯誤: {e}")
         return jsonify({'success': False, 'message': '刪除素材時發生伺服器錯誤。'}), 500
 
+@app.route('/api/assignments', methods=['GET'])
+def get_assignments():
+    """獲取所有內容指派"""
+    try:
+        assignments = Assignment.query.all()
+        assignments_data = []
+        for assignment in assignments:
+            assignment_data = {
+                'id': assignment.id,
+                'section_key': assignment.section_key,
+                'content_source_type': assignment.content_source_type,
+                'offset': assignment.offset,
+                'media_id': assignment.media_id,
+                'group_id': assignment.group_id
+            }
+            
+            # 添加相關資料
+            if assignment.material:
+                assignment_data['material'] = {
+                    'id': assignment.material.id,
+                    'original_filename': assignment.material.original_filename,
+                    'type': assignment.material.type,
+                    'url': assignment.material.url
+                }
+            
+            if assignment.carousel_group:
+                assignment_data['group'] = {
+                    'id': assignment.carousel_group.id,
+                    'name': assignment.carousel_group.name
+                }
+                
+            assignments_data.append(assignment_data)
+            
+        return jsonify({'success': True, 'data': assignments_data})
+    except Exception as e:
+        print(f"獲取指派時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '獲取指派時發生伺服器錯誤。'}), 500
+
+@app.route('/api/assignments/<assignment_id>', methods=['GET'])
+def get_assignment(assignment_id):
+    """獲取單個內容指派詳細資訊"""
+    try:
+        assignment = db.session.get(Assignment, assignment_id)
+        if not assignment:
+            return jsonify({'success': False, 'message': '找不到指定的指派'}), 404
+            
+        assignment_data = {
+            'id': assignment.id,
+            'section_key': assignment.section_key,
+            'content_source_type': assignment.content_source_type,
+            'offset': assignment.offset,
+            'media_id': assignment.media_id,
+            'group_id': assignment.group_id
+        }
+        
+        # 添加相關資料
+        if assignment.material:
+            assignment_data['material'] = {
+                'id': assignment.material.id,
+                'original_filename': assignment.material.original_filename,
+                'filename': assignment.material.filename,
+                'type': assignment.material.type,
+                'url': assignment.material.url
+            }
+        
+        if assignment.carousel_group:
+            assignment_data['group'] = {
+                'id': assignment.carousel_group.id,
+                'name': assignment.carousel_group.name,
+                'image_count': len(list(assignment.carousel_group.image_associations))
+            }
+            
+        return jsonify({'success': True, 'data': assignment_data})
+    except Exception as e:
+        print(f"獲取指派詳細資訊時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '獲取指派詳細資訊時發生伺服器錯誤。'}), 500
+
+@app.route('/api/assignments/<assignment_id>', methods=['PUT'])
+@token_required
+def update_assignment(current_user, assignment_id):
+    """更新內容指派"""
+    data = request.json
+    if not data:
+        return jsonify({'success': False, 'message': '請求資料不能為空'}), 400
+        
+    try:
+        assignment = db.session.get(Assignment, assignment_id)
+        if not assignment:
+            return jsonify({'success': False, 'message': '找不到指定的指派'}), 404
+            
+        # 更新指派資訊
+        if 'section_key' in data:
+            assignment.section_key = data['section_key']
+        if 'offset' in data:
+            assignment.offset = int(data['offset'])
+        if 'media_id' in data:
+            assignment.media_id = data['media_id']
+            assignment.group_id = None  # 清除群組關聯
+            assignment.content_source_type = 'single_media'
+        if 'group_id' in data:
+            assignment.group_id = data['group_id']
+            assignment.media_id = None  # 清除媒體關聯
+            assignment.content_source_type = 'group_reference'
+            
+        db.session.commit()
+        
+        assignment_data = {
+            'id': assignment.id,
+            'section_key': assignment.section_key,
+            'content_source_type': assignment.content_source_type,
+            'offset': assignment.offset,
+            'media_id': assignment.media_id,
+            'group_id': assignment.group_id
+        }
+        
+        socketio.emit('media_updated', {'message': '指派已更新!'})
+        return jsonify({'success': True, 'message': '指派更新成功', 'data': assignment_data})
+    except Exception as e:
+        db.session.rollback()
+        print(f"更新指派時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '更新指派時發生伺服器錯誤。'}), 500
+
 @app.route('/api/assignments/<assignment_id_to_delete>', methods=['DELETE'])
 @token_required
 def delete_assignment(current_user, assignment_id_to_delete):
-    """處理刪除內容指派的請求"""
+    """刪除內容指派"""
     try:
         assignment_to_delete = db.session.get(Assignment, assignment_id_to_delete)
         if not assignment_to_delete:
@@ -426,17 +618,36 @@ def delete_assignment(current_user, assignment_id_to_delete):
         print(f"刪除指派時發生錯誤: {e}")
         return jsonify({'success': False, 'message': '刪除指派時發生伺服器錯誤。'}), 500
 
-@app.route('/admin/settings/update', methods=['POST'])
+# --- Settings API ---
+@app.route('/api/settings', methods=['GET'])
+def get_settings():
+    """獲取所有設定"""
+    try:
+        settings_from_db = Setting.query.all()
+        settings = {s.key: s.value for s in settings_from_db}
+        return jsonify({'success': True, 'data': settings})
+    except Exception as e:
+        print(f"獲取設定時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '獲取設定時發生伺服器錯誤。'}), 500
+
+@app.route('/api/settings', methods=['PUT'])
 @token_required
-def update_global_settings(current_user):
-    """處理更新全域播放設定的請求，寫入資料庫"""
+def update_settings(current_user):
+    """更新全域播放設定"""
     data = request.json
+    if not data:
+        return jsonify({'success': False, 'message': '請求資料不能為空'}), 400
+        
     try:
         # 遍歷收到的設定並更新資料庫
         for key, value in data.items():
             setting_to_update = db.session.get(Setting, key)
             if setting_to_update:
                 setting_to_update.value = str(value)
+            else:
+                # 如果設定不存在，創建新的設定
+                new_setting = Setting(key=key, value=str(value))
+                db.session.add(new_setting)
         
         db.session.commit()
         
@@ -451,11 +662,74 @@ def update_global_settings(current_user):
         print(f"更新設定時發生錯誤: {e}")
         return jsonify({'success': False, 'message': '儲存設定時發生伺服器錯誤。'}), 500
 
-@app.route('/admin/carousel_group/create', methods=['POST'])
+# --- 向後兼容的舊端點 ---
+@app.route('/admin/settings/update', methods=['POST'])
 @token_required
-def create_carousel_group(current_user):
-    """處理建立新的輪播群組的請求，寫入資料庫"""
-    group_name = request.form.get('group_name')
+def update_global_settings_legacy(current_user):
+    """向後兼容的設定更新端點"""
+    return update_settings(current_user)
+
+# --- Groups API ---
+@app.route('/api/groups', methods=['GET'])
+def get_groups():
+    """獲取所有輪播群組"""
+    try:
+        groups = CarouselGroup.query.all()
+        groups_data = []
+        for group in groups:
+            groups_data.append({
+                'id': group.id,
+                'name': group.name,
+                'image_ids': [assoc.material_id for assoc in group.image_associations],
+                'image_count': len(list(group.image_associations))
+            })
+        return jsonify({'success': True, 'data': groups_data})
+    except Exception as e:
+        print(f"獲取群組時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '獲取群組時發生伺服器錯誤。'}), 500
+
+@app.route('/api/groups/<group_id>', methods=['GET'])
+def get_group(group_id):
+    """獲取單個輪播群組詳細資訊"""
+    try:
+        group = db.session.get(CarouselGroup, group_id)
+        if not group:
+            return jsonify({'success': False, 'message': '找不到指定的群組'}), 404
+            
+        group_data = {
+            'id': group.id,
+            'name': group.name,
+            'image_ids': [assoc.material_id for assoc in group.image_associations],
+            'images': []
+        }
+        
+        # 獲取群組中的所有圖片詳細資訊
+        for assoc in group.image_associations:
+            if assoc.material:
+                group_data['images'].append({
+                    'id': assoc.material.id,
+                    'original_filename': assoc.material.original_filename,
+                    'filename': assoc.material.filename,
+                    'url': assoc.material.url,
+                    'order': assoc.order
+                })
+                
+        return jsonify({'success': True, 'data': group_data})
+    except Exception as e:
+        print(f"獲取群組詳細資訊時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '獲取群組詳細資訊時發生伺服器錯誤。'}), 500
+
+@app.route('/api/groups', methods=['POST'])
+@token_required
+def create_group(current_user):
+    """建立新的輪播群組"""
+    # 支援兩種資料格式：JSON 和 form-data
+    if request.is_json:
+        data = request.json
+        group_name = data.get('name') if data else None
+    else:
+        group_name = request.form.get('group_name') or request.form.get('name')
+        
     if not group_name:
         return jsonify({'success': False, 'message': '群組名稱不能為空'}), 400
     
@@ -464,19 +738,59 @@ def create_carousel_group(current_user):
         db.session.add(new_group)
         db.session.commit()
         
+        group_data = {
+            'id': new_group.id,
+            'name': new_group.name,
+            'image_ids': [],
+            'image_count': 0
+        }
+        
         socketio.emit('media_updated', {'message': '群組已建立!'})
-        return jsonify({'success': True, 'message': '群組建立成功'})
+        return jsonify({'success': True, 'message': '群組建立成功', 'data': group_data}), 201
     except Exception as e:
         db.session.rollback()
         print(f"建立群組時發生錯誤: {e}")
         return jsonify({'success': False, 'message': '建立群組時發生伺服器錯誤。'}), 500
 
-@app.route('/admin/carousel_group/delete/<group_id_to_delete>', methods=['POST'])
+@app.route('/api/groups/<group_id>', methods=['PUT'])
 @token_required
-def delete_carousel_group(current_user, group_id_to_delete):
-    """處理刪除輪播群組的請求，從資料庫刪除"""
+def update_group(current_user, group_id):
+    """更新輪播群組資訊"""
+    data = request.json
+    if not data:
+        return jsonify({'success': False, 'message': '請求資料不能為空'}), 400
+        
     try:
-        group_to_delete = db.session.get(CarouselGroup, group_id_to_delete)
+        group = db.session.get(CarouselGroup, group_id)
+        if not group:
+            return jsonify({'success': False, 'message': '找不到指定的群組'}), 404
+            
+        # 更新群組名稱
+        if 'name' in data:
+            group.name = data['name']
+            
+        db.session.commit()
+        
+        group_data = {
+            'id': group.id,
+            'name': group.name,
+            'image_ids': [assoc.material_id for assoc in group.image_associations],
+            'image_count': len(list(group.image_associations))
+        }
+        
+        socketio.emit('media_updated', {'message': '群組資訊已更新!'})
+        return jsonify({'success': True, 'message': '群組更新成功', 'data': group_data})
+    except Exception as e:
+        db.session.rollback()
+        print(f"更新群組時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '更新群組時發生伺服器錯誤。'}), 500
+
+@app.route('/api/groups/<group_id>', methods=['DELETE'])
+@token_required
+def delete_group(current_user, group_id):
+    """刪除輪播群組"""
+    try:
+        group_to_delete = db.session.get(CarouselGroup, group_id)
         if not group_to_delete:
             return jsonify({'success': False, 'message': '找不到要刪除的群組'}), 404
 
@@ -509,11 +823,17 @@ def delete_carousel_group(current_user, group_id_to_delete):
         print(f"刪除群組時發生錯誤: {e}")
         return jsonify({'success': False, 'message': '刪除群組時發生伺服器錯誤。'}), 500
 
-# 在現有路由後新增以下路由
-@app.route('/admin/carousel_group/upload_images/<group_id>', methods=['POST'])
+# --- 向後兼容的舊端點 ---
+@app.route('/admin/carousel_group/create', methods=['POST'])
 @token_required
-def upload_images_to_group(current_user, group_id):
-    """處理群組專屬的多圖片上傳，寫入資料庫"""
+def create_carousel_group_legacy(current_user):
+    """向後兼容的群組建立端點"""
+    return create_group(current_user)
+
+@app.route('/api/groups/<group_id>/images', methods=['POST'])
+@token_required
+def upload_group_images(current_user, group_id):
+    """上傳圖片到指定群組"""
     try:
         group = db.session.get(CarouselGroup, group_id)
         if not group:
@@ -567,12 +887,11 @@ def upload_images_to_group(current_user, group_id):
         
         if uploaded_image_objects:
             db.session.commit()
-            # socketio.emit('media_updated', {'message': f'成功上傳 {len(uploaded_image_objects)} 張圖片到群組！'})
             return jsonify({
                 'success': True, 
                 'message': f'成功上傳 {len(uploaded_image_objects)} 張圖片',
-                'uploaded_images': uploaded_image_objects
-            })
+                'data': uploaded_image_objects
+            }), 201
         else:
             return jsonify({'success': False, 'message': '沒有成功上傳任何圖片，請檢查檔案格式'}), 400
             
@@ -581,13 +900,13 @@ def upload_images_to_group(current_user, group_id):
         print(f"群組上傳圖片時發生錯誤: {str(e)}")
         return jsonify({'success': False, 'message': f'上傳失敗: {str(e)}'}), 500
 
-@app.route('/admin/carousel_group/update_images/<group_id>', methods=['POST'])
+@app.route('/api/groups/<group_id>/images', methods=['PUT'])
 @token_required
-def update_carousel_group_images(current_user, group_id):
-    """處理更新輪播群組中圖片順序的請求，寫入資料庫"""
+def update_group_images(current_user, group_id):
+    """更新群組中圖片的順序"""
     data = request.get_json()
     if not data or 'image_ids' not in data:
-        return jsonify({'success': False, 'message': '請求無效'}), 400
+        return jsonify({'success': False, 'message': '請求無效，缺少 image_ids 參數'}), 400
 
     try:
         group = db.session.get(CarouselGroup, group_id)
@@ -605,12 +924,40 @@ def update_carousel_group_images(current_user, group_id):
                 db.session.add(new_assoc)
         
         db.session.commit()
+        
+        # 獲取更新後的群組資訊
+        updated_group_data = {
+            'id': group.id,
+            'name': group.name,
+            'image_ids': data['image_ids'],
+            'image_count': len(data['image_ids'])
+        }
+        
         socketio.emit('media_updated', {'message': '圖片順序已更新!'})
-        return jsonify({'success': True, 'message': '圖片順序已儲存'})
+        return jsonify({'success': True, 'message': '圖片順序已儲存', 'data': updated_group_data})
     except Exception as e:
         db.session.rollback()
         print(f"更新群組圖片時發生錯誤: {e}")
         return jsonify({'success': False, 'message': '更新群組圖片時發生伺服器錯誤。'}), 500
+
+# --- 向後兼容的舊端點 ---
+@app.route('/admin/carousel_group/delete/<group_id_to_delete>', methods=['POST'])
+@token_required
+def delete_carousel_group_legacy(current_user, group_id_to_delete):
+    """向後兼容的群組刪除端點"""
+    return delete_group(current_user, group_id_to_delete)
+
+@app.route('/admin/carousel_group/upload_images/<group_id>', methods=['POST'])
+@token_required
+def upload_images_to_group_legacy(current_user, group_id):
+    """向後兼容的群組圖片上傳端點"""
+    return upload_group_images(current_user, group_id)
+
+@app.route('/admin/carousel_group/update_images/<group_id>', methods=['POST'])
+@token_required
+def update_carousel_group_images_legacy(current_user, group_id):
+    """向後兼容的群組圖片順序更新端點"""
+    return update_group_images(current_user, group_id)
     
 # --- 公開 API ---
 @app.route('/api/media_with_settings', methods=['GET'])

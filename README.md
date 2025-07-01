@@ -1,11 +1,18 @@
 # MQ 直立式廣告機內容管理系統
 
-**版本：** v3.8
+**版本：** v3.9
 **最後更新日期：** 2025年6月29日
 
 ## 專案概述
 
 本專案是一個輕量級的後台內容管理系統（CMS），專為「MQ 直立式廣告機」前端頁面設計。它提供了一個受密碼保護的管理介面，讓管理者能夠上傳媒體素材（圖片、影片）、管理輪播內容，並將這些素材即時指派到前端廣告機的特定顯示區塊。所有內容的變更都會透過 WebSocket 即時同步到前端頁面，無需重新整理。
+
+### v3.9 版本亮點
+- **RESTful API 重構完成**：完全重構後端 API 為標準的 RESTful 風格，提供清晰的資源導向端點。
+- **API 文檔完善**：新增完整的 API 文檔，詳細說明所有端點的使用方法和參數。
+- **向後兼容性保證**：保留所有舊的 API 端點，確保現有前端代碼正常運行。
+- **前端代碼現代化**：更新前端 JavaScript 代碼，使用新的 RESTful API 端點。
+- **統一錯誤處理**：所有 API 端點採用統一的錯誤響應格式，提升開發體驗。
 
 ### v3.8 版本亮點
 - **資料庫整合完成**：完全棄用 JSON 檔案儲存，所有資料現在統一存放在 SQLite 資料庫中，提升資料一致性和系統穩定性。
@@ -84,10 +91,11 @@
 
 ```markdown
 MQ-CMS
-├── app.py                  # Flask 主應用程式
+��── app.py                  # Flask 主應用程式
 ├── init_db.py              # 資料庫初始化腳本
 ├── requirements.txt        # Python 依賴套件
 ├── README.md               # 專案說明文件
+├── API_DOCUMENTATION.md    # RESTful API 文檔
 ├── 工作日誌.md              # 開發日誌記錄
 ├── instance/
 │   └── mq_cms.db          # SQLite 資料庫檔案
@@ -113,14 +121,16 @@ MQ-CMS
 
 為了讓專案更健壯、可擴展且易於維護，建議未來可以從以下幾個方向進行優化：
 
-### 1. 後端 API 重構 (RESTful API)
-* **現狀**: 目前的後端 API 端點較為混合，例如 `/admin/add` 和 `/admin/delete/<item_id>` 同時處理多種類型的操作（新增素材、指派群組、刪除素材、刪除指派等），這使得後端邏輯變得複雜且不易維護。
-* **優化建議**: 將 API 重構為更符合 RESTful 風格的結構，為每種「資源」建立專屬的端點。
-    * **媒體素材**: `GET /api/materials`, `POST /api/materials`, `DELETE /api/materials/<id>`
-    * **輪播群組**: `GET /api/groups`, `POST /api/groups`, `PUT /api/groups/<id>`, `DELETE /api/groups/<id>`
-    * **內容指派**: `GET /api/assignments`, `POST /api/assignments`, `PUT /api/assignments/<id>`, `DELETE /api/assignments/<id>`
+### 1. 後端 API 重構 (RESTful API) ✅ 已���成
+* **現狀**: 已完成後端 API 的完整 RESTful 重構，所有資源都有專屬的端點。
+* **已實現的端點**:
+    * **媒體素材**: `GET /api/materials`, `GET /api/materials/<id>`, `POST /api/materials`, `DELETE /api/materials/<id>`
+    * **輪播群組**: `GET /api/groups`, `GET /api/groups/<id>`, `POST /api/groups`, `PUT /api/groups/<id>`, `DELETE /api/groups/<id>`
+    * **群組圖片管理**: `POST /api/groups/<id>/images`, `PUT /api/groups/<id>/images`
+    * **內容指派**: `GET /api/assignments`, `GET /api/assignments/<id>`, `POST /api/assignments`, `PUT /api/assignments/<id>`, `DELETE /api/assignments/<id>`
     * **全局設定**: `GET /api/settings`, `PUT /api/settings`
-* **優點**: 使 API 語義清晰，職責單一，降低程式碼耦合度，方便未來擴展和除錯。
+* **優點**: API 語義清晰，職責單一，使用標準 HTTP 方法，支援向後兼容。
+* **文檔**: 完整的 API 文檔可參考 `API_DOCUMENTATION.md`。
 
 ### 2. 前端狀態管理與模組化
 * **現狀**: `admin.js` 檔案承擔了所有前端邏輯，包括 API 請求、DOM 操作和事件處理，已變得相當龐大。資料狀態散落在從 `admin.html` 傳遞的全局變數 (`allMediaItemsForJS`) 和各個函式的內部變數中，難以追蹤和管理。

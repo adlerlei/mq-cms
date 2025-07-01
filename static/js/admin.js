@@ -91,6 +91,33 @@ async function fetchDataAndRender() {
 function renderAll() {
     renderMediaAndAssignments();
     renderCarouselGroups();
+    renderGroupAssignmentDropdown(); // <-- Add this line
+}
+
+// =========================================================================
+// Render Functions
+// =========================================================================
+
+/**
+ * Renders the dropdown for assigning carousel groups.
+ */
+function renderGroupAssignmentDropdown() {
+    const groupSelect = document.querySelector('#carouselGroupField select[name="carousel_group_id"]');
+    if (!groupSelect) return;
+
+    const { groups } = appState;
+    groupSelect.innerHTML = ''; // Clear existing options
+
+    if (groups.length === 0) {
+        groupSelect.innerHTML = '<option value="" disabled>沒有可用的輪播組</option>';
+    } else {
+        groups.forEach(group => {
+            const option = document.createElement('option');
+            option.value = group.id;
+            option.textContent = group.name;
+            groupSelect.appendChild(option);
+        });
+    }
 }
 
 // =========================================================================
@@ -344,7 +371,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const createButton = document.getElementById('createGroupButton');
             createButton.classList.add('is-loading');
             try {
-                const response = await fetchWithAuth(form.action, { method: 'POST', body: new FormData(form) });
+                const formData = new FormData(form);
+                const response = await fetchWithAuth('/api/groups', { method: 'POST', body: formData });
                 if (!response.ok) throw new Error((await response.json()).message || '建立群組失敗');
                 form.reset();
                 fetchDataAndRender();
@@ -366,7 +394,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 footer_interval: document.getElementById('footer_interval').value
             };
             try {
-                const response = await fetchWithAuth('/admin/settings/update', { method: 'POST', body: JSON.stringify(payload) });
+                const response = await fetchWithAuth('/api/settings', { method: 'PUT', body: JSON.stringify(payload) });
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.message || '儲存設定失敗');
                 notification.textContent = data.message || '設定儲存成功！';
@@ -394,7 +422,7 @@ document.addEventListener('DOMContentLoaded', () => {
             };
             const apiDetails = {
                 material: { url: `/api/materials/${itemId}`, method: 'DELETE' },
-                carousel_group: { url: `/admin/carousel_group/delete/${itemId}`, method: 'POST' },
+                carousel_group: { url: `/api/groups/${itemId}`, method: 'DELETE' },
                 assignment: { url: `/api/assignments/${itemId}`, method: 'DELETE' }
             };
 
@@ -416,8 +444,82 @@ document.addEventListener('DOMContentLoaded', () => {
             openGroupEditModal(editButton.dataset.groupId, editButton.dataset.groupName);
         }
 
-        if (event.target.matches('.modal-background, .modal-card-head .delete, #cancelGroupChangesButton')) {
+        const reassignButton = event.target.closest('.reassign-media-button');
+        if (reassignButton) {
+            const mediaId = reassignButton.dataset.mediaId;
+            const mediaType = reassignButton.dataset.mediaType;
+            const mediaFilename = reassignButton.dataset.mediaFilename;
+
+            // --- FIX: Use Modal instead of prompt ---
+            const modal = document.getElementById('reassignMediaModal');
+            const select = document.getElementById('reassignSectionSelect');
+            
+            if (!modal || !select) return;
+
+            // Populate modal fields
+            document.getElementById('reassignMediaFilename').textContent = mediaFilename;
+            document.getElementById('reassignMediaId').value = mediaId;
+            document.getElementById('reassignMediaType').value = mediaType;
+
+            // Populate select options
+            select.innerHTML = '<option value="" disabled selected>-- 請選擇區塊 --</option>';
+            const sectionOrder = ['header_video', 'carousel_top_left', 'carousel_top_right', 'carousel_bottom_left', 'carousel_bottom_right', 'footer_content'];
+            sectionOrder.forEach(key => {
+                if (appState.available_sections[key]) {
+                    const option = document.createElement('option');
+                    option.value = key;
+                    option.textContent = appState.available_sections[key];
+                    select.appendChild(option);
+                }
+            });
+
+            modal.classList.add('is-active');
+        }
+
+        if (event.target.matches('#confirmReassignButton')) {
+            const modal = document.getElementById('reassignMediaModal');
+            const mediaId = document.getElementById('reassignMediaId').value;
+            const sectionKey = document.getElementById('reassignSectionSelect').value;
+
+            if (!sectionKey) {
+                alert('請選擇一個要指派的區塊。');
+                return;
+            }
+
+            const button = event.target;
+            button.classList.add('is-loading');
+
+            try {
+                const formData = new FormData();
+                formData.append('section_key', sectionKey);
+                formData.append('type', 'single_media');
+                formData.append('media_id', mediaId);
+
+                const response = await fetchWithAuth('/api/assignments', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.message || '重新指派失敗');
+                }
+
+                closeModal('reassignMediaModal');
+                fetchDataAndRender();
+
+            } catch (error) {
+                if (error.message !== 'Unauthorized') {
+                    alert(`重新指派失敗: ${error.message}`);
+                }
+            } finally {
+                button.classList.remove('is-loading');
+            }
+        }
+
+        if (event.target.matches('.modal-background, .modal-card-head .delete, #cancelGroupChangesButton, #cancelReassignButton')) {
             closeModal('editCarouselGroupModal');
+            closeModal('reassignMediaModal');
         }
 
         // --- FIX STARTS HERE: Toggle button for moving images in modal ---
@@ -449,8 +551,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const imageIds = [...selectedImagesList.querySelectorAll('.image-list-item')].map(item => item.dataset.imageId);
 
             try {
-                const response = await fetchWithAuth(`/admin/carousel_group/update_images/${groupId}`, {
-                    method: 'POST',
+                const response = await fetchWithAuth(`/api/groups/${groupId}/images`, {
+                    method: 'PUT',
                     body: JSON.stringify({ image_ids: imageIds })
                 });
                 if (!response.ok) throw new Error((await response.json()).message || '儲存失敗');
@@ -510,5 +612,108 @@ document.addEventListener('DOMContentLoaded', () => {
                 return closest;
             }
         }, { offset: Number.NEGATIVE_INFINITY }).element;
+    }
+
+    // --- MODAL UPLOAD LOGIC ---
+    const groupImageUploadInput = document.getElementById('groupImageUpload');
+    const groupUploadFileName = document.getElementById('groupUploadFileName');
+    const uploadToGroupButton = document.getElementById('uploadToGroupButton');
+    const groupUploadProgress = document.getElementById('groupUploadProgress');
+
+    if (groupImageUploadInput) {
+        groupImageUploadInput.addEventListener('change', () => {
+            if (groupImageUploadInput.files.length > 0) {
+                groupUploadFileName.textContent = `${groupImageUploadInput.files.length} 個檔案已選擇`;
+                uploadToGroupButton.disabled = false;
+            } else {
+                groupUploadFileName.textContent = '未選擇任何檔案';
+                uploadToGroupButton.disabled = true;
+            }
+        });
+    }
+
+    if (uploadToGroupButton) {
+        uploadToGroupButton.addEventListener('click', async () => {
+            const groupId = document.getElementById('modalGroupId').value;
+            const files = groupImageUploadInput.files;
+
+            if (!groupId || files.length === 0) {
+                alert('請選擇要上傳的檔案。');
+                return;
+            }
+
+            const formData = new FormData();
+            for (const file of files) {
+                formData.append('files', file);
+            }
+
+            uploadToGroupButton.classList.add('is-loading');
+            uploadToGroupButton.disabled = true;
+            if (groupUploadProgress) groupUploadProgress.style.display = 'block';
+
+            try {
+                const response = await fetchWithAuth(`/api/groups/${groupId}/images`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.message || '上傳失敗');
+                }
+                
+                // --- Success: Update UI without full reload ---
+                if (result.data && Array.isArray(result.data)) {
+                    // 1. Add new materials to global state
+                    appState.materials.push(...result.data);
+                    
+                    // 2. Find the target group in the global state and add the new image IDs
+                    const targetGroup = appState.groups.find(g => g.id === groupId);
+                    if (targetGroup) {
+                        const newImageIds = result.data.map(m => m.id);
+                        if (!targetGroup.image_ids) {
+                            targetGroup.image_ids = [];
+                        }
+                        targetGroup.image_ids.push(...newImageIds);
+                    }
+
+                    // 3. Add new images directly to the "Selected Images" list
+                    const selectedList = document.getElementById('selectedImagesList');
+                    // Remove the placeholder if it exists
+                    const placeholder = selectedList.querySelector('p');
+                    if (placeholder) placeholder.remove();
+
+                    const materialUsage = {}; // Recalculate usage for tags
+                    appState.groups.forEach(g => {
+                        (g.image_ids || []).forEach(imgId => {
+                            if (!materialUsage[imgId]) materialUsage[imgId] = [];
+                            if (g.id !== groupId) materialUsage[imgId].push(g.name);
+                        });
+                    });
+
+                    result.data.forEach(newMaterial => {
+                        // Add to the left list, with the 'minus' button
+                        selectedList.appendChild(createDraggableImageItem(newMaterial, false, materialUsage));
+                    });
+                }
+
+                // 4. Reset the upload form in the modal
+                groupImageUploadInput.value = '';
+                groupUploadFileName.textContent = '未選擇任何檔案';
+                
+            } catch (error) {
+                if (error.message !== 'Unauthorized') {
+                    alert(`上傳失敗: ${error.message}`);
+                }
+            } finally {
+                uploadToGroupButton.classList.remove('is-loading');
+                if (groupUploadProgress) groupUploadProgress.style.display = 'none';
+                // Re-enable button only if files are still selected (e.g. after a failed attempt)
+                if (groupImageUploadInput.files.length > 0) {
+                    uploadToGroupButton.disabled = false;
+                }
+            }
+        });
     }
 });
