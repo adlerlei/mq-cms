@@ -10,8 +10,4 @@ venv/
 .DS_Store
 .idea/
 .qodo
-static/uploads/
-.media.json
-media.json
 .vscode/
-settings.json
