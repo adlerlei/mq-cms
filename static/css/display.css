@@ -94,9 +94,6 @@ body { -ms-overflow-style: none; scrollbar-width: none; }
 .carousel-item img,
 #footer-content-container video,
 #footer-content-container img {
-    position: absolute;
-    top: 0;
-    left: 0;
     width: 100%;
     height: 100%;
     object-fit: cover; /* 保持裁切填滿效果 */

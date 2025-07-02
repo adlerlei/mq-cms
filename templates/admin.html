@@ -304,7 +304,7 @@
         // Pass data from Flask to JavaScript that is needed on page load.
         const available_sections_for_js = {{ available_sections | tojson }};
     </script>
-    <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+    <script type="module" src="{{ url_for('static', filename='js/admin.js') }}"></script>
     </div> <!-- 關閉 mainContent div -->
 </body>
 </html>
