@@ -15,5 +15,6 @@ venv/
 static/uploads/*
 !static/uploads/.gitkeep
 
-# 忽略 instance 資料夾中的所有 .db 檔案，但保留資料夾
+# 忽略資料庫檔案
 instance/*.db
+!instance/.gitkeep
