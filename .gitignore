@@ -18,3 +18,10 @@ static/uploads/*
 # 忽略資料庫檔案
 instance/*.db
 !instance/.gitkeep
+
+# Node / Javascript
+node_modules/
+
+# Testing
+coverage/
+.pytest_cache/

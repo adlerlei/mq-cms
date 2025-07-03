@@ -1,0 +1,30 @@
+{
+  "name": "mq-cms",
+  "version": "1.0.0",
+  "description": "**版本：** v3.10.0 **最後更新日期：** 2025年7月1日",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adlerlei/mq-cms.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/adlerlei/mq-cms/issues"
+  },
+  "homepage": "https://github.com/adlerlei/mq-cms#readme",
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@babel/preset-env": "^7.24.0",
+    "babel-jest": "^29.7.0",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^30.0.4"
+  }
+}
