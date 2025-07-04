@@ -10,7 +10,8 @@ const state = {
     assignments: [],
     materials: [],
     settings: {},
-    available_sections: {}
+    available_sections: {},
+    users: []
 };
 
 // Listeners that will be called when the state changes.

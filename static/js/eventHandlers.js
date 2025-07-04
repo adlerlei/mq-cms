@@ -249,15 +249,54 @@ export function initializeEventListeners() {
             openReassignMediaModal(reassignButton.dataset.mediaId, reassignButton.dataset.mediaType, reassignButton.dataset.mediaFilename);
         }
 
+        // User management buttons
+        if (event.target.id === 'addUserButton') {
+            openUserModal();
+        }
+
+        const editUserButton = event.target.closest('.edit-user-button');
+        if (editUserButton) {
+            const userId = editUserButton.dataset.userId;
+            const username = editUserButton.dataset.userUsername;
+            const role = editUserButton.dataset.userRole;
+            const isActive = editUserButton.dataset.userActive === 'true';
+            openUserModal(userId, username, role, isActive);
+        }
+
+        const resetPasswordButton = event.target.closest('.reset-password-button');
+        if (resetPasswordButton) {
+            const userId = resetPasswordButton.dataset.userId;
+            const username = resetPasswordButton.dataset.userUsername;
+            openResetPasswordModal(userId, username);
+        }
+
+        const toggleUserStatusButton = event.target.closest('.toggle-user-status-button');
+        if (toggleUserStatusButton) {
+            const userId = toggleUserStatusButton.dataset.userId;
+            const isActive = toggleUserStatusButton.dataset.userActive === 'true';
+            handleToggleUserStatus(userId, !isActive);
+        }
+
+        const deleteUserButton = event.target.closest('.delete-user-button');
+        if (deleteUserButton) {
+            const userId = deleteUserButton.dataset.userId;
+            const username = deleteUserButton.dataset.userUsername;
+            handleDeleteUser(userId, username);
+        }
+
         // Modal actions
         if (event.target.id === 'confirmReassignButton') handleReassignConfirm(event);
         if (event.target.id === 'saveGroupChangesButton') handleSaveGroupChanges(event);
         if (event.target.closest('#uploadToGroupButton')) handleGroupImageUpload(event);
+        if (event.target.id === 'saveUserButton') handleSaveUser(event);
+        if (event.target.id === 'confirmResetPasswordButton') handleResetPassword(event);
 
         // Modal close buttons
-        if (event.target.matches('.modal-background, .modal-card-head .delete, #cancelGroupChangesButton, #cancelReassignButton')) {
+        if (event.target.matches('.modal-background, .modal-card-head .delete, #cancelGroupChangesButton, #cancelReassignButton, #cancelUserButton, #cancelResetPasswordButton')) {
             closeModal('editCarouselGroupModal');
             closeModal('reassignMediaModal');
+            closeModal('userManagementModal');
+            closeModal('resetPasswordModal');
         }
 
         // Logout
@@ -352,4 +391,171 @@ export function initializeEventListeners() {
     }
 
     listenersInitialized = true;
+}
+
+// =========================================================================
+// User Management Functions
+// =========================================================================
+
+function openUserModal(userId = null, username = '', role = 'admin', isActive = true) {
+    const modal = document.getElementById('userManagementModal');
+    const title = document.getElementById('userModalTitle');
+    const userIdInput = document.getElementById('userFormUserId');
+    const usernameInput = document.getElementById('userFormUsername');
+    const passwordField = document.getElementById('passwordField');
+    const passwordInput = document.getElementById('userFormPassword');
+    const roleSelect = document.getElementById('userFormRole');
+    const isActiveCheckbox = document.getElementById('userFormIsActive');
+
+    if (userId) {
+        // Edit mode
+        title.textContent = '編輯使用者';
+        userIdInput.value = userId;
+        usernameInput.value = username;
+        usernameInput.disabled = true; // Don't allow username changes
+        passwordField.style.display = 'none'; // Hide password field in edit mode
+        passwordInput.required = false;
+        roleSelect.value = role;
+        isActiveCheckbox.checked = isActive;
+    } else {
+        // Add mode
+        title.textContent = '新增使用者';
+        userIdInput.value = '';
+        usernameInput.value = '';
+        usernameInput.disabled = false;
+        passwordField.style.display = 'block';
+        passwordInput.required = true;
+        roleSelect.value = 'admin';
+        isActiveCheckbox.checked = true;
+    }
+
+    modal.classList.add('is-active');
+}
+
+function openResetPasswordModal(userId, username) {
+    const modal = document.getElementById('resetPasswordModal');
+    const usernameSpan = document.getElementById('resetPasswordUsername');
+    const userIdInput = document.getElementById('resetPasswordUserId');
+
+    usernameSpan.textContent = username;
+    userIdInput.value = userId;
+
+    modal.classList.add('is-active');
+}
+
+async function handleSaveUser(event) {
+    const button = event.target;
+    const userId = document.getElementById('userFormUserId').value;
+    const username = document.getElementById('userFormUsername').value;
+    const password = document.getElementById('userFormPassword').value;
+    const role = document.getElementById('userFormRole').value;
+    const isActive = document.getElementById('userFormIsActive').checked;
+
+    if (!username) {
+        alert('請輸入使用者名稱');
+        return;
+    }
+
+    if (!userId && !password) {
+        alert('請輸入密碼');
+        return;
+    }
+
+    button.classList.add('is-loading');
+    button.disabled = true;
+
+    try {
+        if (userId) {
+            // Update existing user
+            const updateData = { role, is_active: isActive };
+            await api.updateUser(parseInt(userId), updateData);
+            alert('使用者資訊更新成功！');
+        } else {
+            // Create new user
+            const userData = { username, password, role, is_active: isActive };
+            await api.createUser(userData);
+            alert('使用者建立成功！');
+        }
+
+        closeModal('userManagementModal');
+        // Refresh users data
+        await refreshUsersData();
+    } catch (error) {
+        console.error('儲存使用者時發生錯誤:', error);
+        alert(`操作失敗: ${error.message}`);
+    } finally {
+        button.classList.remove('is-loading');
+        button.disabled = false;
+    }
+}
+
+async function handleResetPassword(event) {
+    const button = event.target;
+    const userId = document.getElementById('resetPasswordUserId').value;
+    const newPassword = document.getElementById('resetPasswordNewPassword').value;
+    const confirmPassword = document.getElementById('resetPasswordConfirm').value;
+
+    if (!newPassword) {
+        alert('請輸入新密碼');
+        return;
+    }
+
+    if (newPassword !== confirmPassword) {
+        alert('兩次輸入的密碼不一致');
+        return;
+    }
+
+    button.classList.add('is-loading');
+    button.disabled = true;
+
+    try {
+        await api.resetUserPassword(parseInt(userId), newPassword);
+        alert('密碼重設成功！');
+        closeModal('resetPasswordModal');
+        // Reset form
+        document.getElementById('resetPasswordForm').reset();
+    } catch (error) {
+        console.error('重設密碼時發生錯誤:', error);
+        alert(`重設密碼失敗: ${error.message}`);
+    } finally {
+        button.classList.remove('is-loading');
+        button.disabled = false;
+    }
+}
+
+async function handleToggleUserStatus(userId, newStatus) {
+    try {
+        await api.updateUser(parseInt(userId), { is_active: newStatus });
+        alert(`使用者狀態已${newStatus ? '啟用' : '停用'}`);
+        // Refresh users data
+        await refreshUsersData();
+    } catch (error) {
+        console.error('更新使用者狀態時發生錯誤:', error);
+        alert(`操作失敗: ${error.message}`);
+    }
+}
+
+async function handleDeleteUser(userId, username) {
+    if (!confirm(`確定要刪除使用者「${username}」嗎？此操作無法復原。`)) {
+        return;
+    }
+
+    try {
+        await api.deleteUser(parseInt(userId));
+        alert('使用者刪除成功！');
+        // Refresh users data
+        await refreshUsersData();
+    } catch (error) {
+        console.error('刪除使用者時發生錯誤:', error);
+        alert(`刪除失敗: ${error.message}`);
+    }
+}
+
+async function refreshUsersData() {
+    try {
+        const response = await api.getUsers();
+        setState({ users: response.data });
+    } catch (error) {
+        console.error('重新載入使用者資料時發生錯誤:', error);
+    }
 }

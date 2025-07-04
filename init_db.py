@@ -22,7 +22,7 @@ def init_db():
     if not User.query.filter_by(username='admin').first():
         print("正在建立預設 admin 使用者...")
         hashed_password = generate_password_hash('password', method='pbkdf2:sha256')
-        new_admin = User(username='admin', password_hash=hashed_password, role='administrator')
+        new_admin = User(username='admin', password_hash=hashed_password, role='admin')
         db.session.add(new_admin)
         print("預設管理員帳號 'admin' 已成功建立，密碼為 'password'。")
     else:

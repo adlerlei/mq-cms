@@ -199,6 +199,36 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- 使用者管理 -->
+                <div class="column is-half">
+                    <div class="box">
+                        <h2 class="title is-4">使用者管理</h2>
+                        <div class="field is-grouped is-grouped-right mb-4">
+                            <button id="addUserButton" class="button is-primary">
+                                <i class="fas fa-user-plus"></i>
+                                <span>新增使用者</span>
+                            </button>
+                        </div>
+                        <div class="table-container">
+                            <table class="table is-fullwidth is-striped is-hoverable" id="usersTable">
+                                <thead>
+                                    <tr>
+                                        <th>使用者名稱</th>
+                                        <th>角色</th>
+                                        <th>狀態</th>
+                                        <th class="has-text-right">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="usersTableBody">
+                                    <tr>
+                                        <td colspan="4" class="has-text-centered">載入中...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </section>
@@ -294,6 +324,95 @@
             <footer class="modal-card-foot">
                 <button id="confirmReassignButton" class="button is-success">確認指派</button>
                 <button class="button" id="cancelReassignButton">取消</button>
+            </footer>
+        </div>
+    </div>
+
+    <!-- 使用者管理 Modal -->
+    <div id="userManagementModal" class="modal">
+        <div class="modal-background"></div>
+        <div class="modal-card">
+            <header class="modal-card-head">
+                <p class="modal-card-title" id="userModalTitle">新增使用者</p>
+                <button class="delete" aria-label="close"></button>
+            </header>
+            <section class="modal-card-body">
+                <form id="userForm">
+                    <input type="hidden" id="userFormUserId">
+                    
+                    <div class="field">
+                        <label class="label">使用者名稱</label>
+                        <div class="control">
+                            <input class="input" type="text" id="userFormUsername" required placeholder="請輸入使用者名稱">
+                        </div>
+                    </div>
+
+                    <div class="field" id="passwordField">
+                        <label class="label">密碼</label>
+                        <div class="control">
+                            <input class="input" type="password" id="userFormPassword" placeholder="請輸入密碼">
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label class="label">角色</label>
+                        <div class="control">
+                            <div class="select is-fullwidth">
+                                <select id="userFormRole" required>
+                                    <option value="admin">管理員</option>
+                                    <option value="user">一般使用者</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <div class="control">
+                            <label class="checkbox">
+                                <input type="checkbox" id="userFormIsActive" checked>
+                                啟用帳戶
+                            </label>
+                        </div>
+                    </div>
+                </form>
+            </section>
+            <footer class="modal-card-foot">
+                <button id="saveUserButton" class="button is-success">儲存</button>
+                <button class="button" id="cancelUserButton">取消</button>
+            </footer>
+        </div>
+    </div>
+
+    <!-- 重設密碼 Modal -->
+    <div id="resetPasswordModal" class="modal">
+        <div class="modal-background"></div>
+        <div class="modal-card">
+            <header class="modal-card-head">
+                <p class="modal-card-title">重設密碼: <span id="resetPasswordUsername"></span></p>
+                <button class="delete" aria-label="close"></button>
+            </header>
+            <section class="modal-card-body">
+                <form id="resetPasswordForm">
+                    <input type="hidden" id="resetPasswordUserId">
+                    
+                    <div class="field">
+                        <label class="label">新密碼</label>
+                        <div class="control">
+                            <input class="input" type="password" id="resetPasswordNewPassword" required placeholder="請輸入新密碼">
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label class="label">確認新密碼</label>
+                        <div class="control">
+                            <input class="input" type="password" id="resetPasswordConfirm" required placeholder="請再次輸入新密碼">
+                        </div>
+                    </div>
+                </form>
+            </section>
+            <footer class="modal-card-foot">
+                <button id="confirmResetPasswordButton" class="button is-success">重設密碼</button>
+                <button class="button" id="cancelResetPasswordButton">取消</button>
             </footer>
         </div>
     </div>

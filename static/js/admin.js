@@ -52,6 +52,17 @@ document.addEventListener('DOMContentLoaded', () => {
             // Fetch data from the server
             const data = await api.getInitialData();
             
+            // Fetch users data
+            let usersData = [];
+            try {
+                const usersResponse = await api.getUsers();
+                usersData = usersResponse.data || [];
+            } catch (usersError) {
+                console.error('Failed to fetch users data:', usersError);
+                // Don't fail the entire initialization if users fetch fails
+                // This allows non-admin users to still use the system
+            }
+            
             // Get data passed from Flask template
             // This is the only place we rely on this global variable.
             // In a full SPA, this would also be fetched via API.
@@ -63,7 +74,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 materials: data._debug_all_materials || [],
                 groups: data._debug_all_groups || [],
                 settings: data.settings || {},
-                available_sections: available_sections
+                available_sections: available_sections,
+                users: usersData
             });
 
             // Hide loading screen and show main content

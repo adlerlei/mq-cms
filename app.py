@@ -8,6 +8,7 @@ from flask_socketio import SocketIO
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
 from functools import wraps
 import jwt
 import datetime
@@ -23,6 +24,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///mq_cms.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
+migrate = Migrate(app, db)
 CORS(app)
 socketio = SocketIO(app, async_mode='eventlet', cors_allowed_origins="*")
 
@@ -55,6 +57,7 @@ class User(db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
     role = db.Column(db.String(80), nullable=False, default='admin')
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
     def __repr__(self): return f'<User {self.username}>'
 
 # 輪播群組與圖片的多對多關聯表 (改用 Association Object 來儲存順序)
@@ -167,6 +170,17 @@ def page_auth_required(f):
         return f(current_user, *args, **kwargs)
     return decorated
 
+def admin_required(f):
+    """管理者權限檢查裝飾器，需要在 token_required 之後使用"""
+    @wraps(f)
+    def decorated(current_user, *args, **kwargs):
+        if current_user.role != 'admin':
+            return jsonify({'message': '權限不足，需要管理者權限'}), 403
+        if not current_user.is_active:
+            return jsonify({'message': '帳戶已被停用'}), 403
+        return f(current_user, *args, **kwargs)
+    return decorated
+
 # --- 頁面渲染路由 ---
 @app.route('/')
 def login_page():
@@ -242,6 +256,11 @@ def login():
     user = User.query.filter_by(username=auth.get('username')).first()
     if not user or not check_password_hash(user.password_hash, auth.get('password')):
         return jsonify({'message': '帳號或密碼錯誤'}), 401
+    
+    # 檢查帳戶是否啟用
+    if not user.is_active:
+        return jsonify({'message': '帳戶已被停用，請聯絡管理員'}), 403
+        
     token = jwt.encode({'username': user.username, 'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=8)}, app.config['SECRET_KEY'], algorithm="HS256")
     return jsonify({'access_token': token})
 
@@ -958,6 +977,167 @@ def upload_images_to_group_legacy(current_user, group_id):
 def update_carousel_group_images_legacy(current_user, group_id):
     """向後兼容的群組圖片順序更新端點"""
     return update_group_images(current_user, group_id)
+
+# --- 使用者管理 API ---
+@app.route('/api/users', methods=['GET'])
+@token_required
+@admin_required
+def get_users(current_user):
+    """取得所有使用者列表（需管理者權限）"""
+    try:
+        users = User.query.all()
+        users_data = []
+        for user in users:
+            users_data.append({
+                'id': user.id,
+                'username': user.username,
+                'role': user.role,
+                'is_active': user.is_active
+            })
+        return jsonify({'success': True, 'data': users_data})
+    except Exception as e:
+        print(f"獲取使用者列表時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '獲取使用者列表時發生伺服器錯誤。'}), 500
+
+@app.route('/api/users', methods=['POST'])
+@token_required
+@admin_required
+def create_user(current_user):
+    """建立新使用者（需管理者權限）"""
+    data = request.json
+    if not data:
+        return jsonify({'success': False, 'message': '請求資料不能為空'}), 400
+        
+    username = data.get('username')
+    password = data.get('password')
+    role = data.get('role', 'admin')
+    is_active = data.get('is_active', True)
+    
+    if not username or not password:
+        return jsonify({'success': False, 'message': '使用者名稱和密碼為必填欄位'}), 400
+        
+    try:
+        # 檢查使用者名稱是否已存在
+        existing_user = User.query.filter_by(username=username).first()
+        if existing_user:
+            return jsonify({'success': False, 'message': '使用者名稱已存在'}), 400
+            
+        # 建立新使用者
+        new_user = User(
+            username=username,
+            password_hash=generate_password_hash(password),
+            role=role,
+            is_active=is_active
+        )
+        
+        db.session.add(new_user)
+        db.session.commit()
+        
+        user_data = {
+            'id': new_user.id,
+            'username': new_user.username,
+            'role': new_user.role,
+            'is_active': new_user.is_active
+        }
+        
+        return jsonify({'success': True, 'message': '使用者建立成功', 'data': user_data}), 201
+    except Exception as e:
+        db.session.rollback()
+        print(f"建立使用者時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '建立使用者時發生伺服器錯誤。'}), 500
+
+@app.route('/api/users/<int:user_id>', methods=['PUT'])
+@token_required
+@admin_required
+def update_user(current_user, user_id):
+    """更新指定使用者的資訊（需管理者權限）"""
+    data = request.json
+    if not data:
+        return jsonify({'success': False, 'message': '請求資料不能為空'}), 400
+        
+    try:
+        user = db.session.get(User, user_id)
+        if not user:
+            return jsonify({'success': False, 'message': '找不到指定的使用者'}), 404
+            
+        # 防止管理者剝奪自己的管理權限或停用自己的帳號
+        if user.id == current_user.id:
+            if 'role' in data and data['role'] != 'admin':
+                return jsonify({'success': False, 'message': '無法修改自己的角色權限'}), 400
+            if 'is_active' in data and not data['is_active']:
+                return jsonify({'success': False, 'message': '無法停用自己的帳號'}), 400
+                
+        # 更新使用者資訊
+        if 'role' in data:
+            user.role = data['role']
+        if 'is_active' in data:
+            user.is_active = data['is_active']
+            
+        db.session.commit()
+        
+        user_data = {
+            'id': user.id,
+            'username': user.username,
+            'role': user.role,
+            'is_active': user.is_active
+        }
+        
+        return jsonify({'success': True, 'message': '使用者資訊更新成功', 'data': user_data})
+    except Exception as e:
+        db.session.rollback()
+        print(f"更新使用者時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '更新使用者時發生伺服器錯誤。'}), 500
+
+@app.route('/api/users/<int:user_id>/password', methods=['PUT'])
+@token_required
+@admin_required
+def reset_user_password(current_user, user_id):
+    """重設指定使用者的密碼（需管理者權限）"""
+    data = request.json
+    if not data or 'password' not in data:
+        return jsonify({'success': False, 'message': '請求資料無效，缺少新密碼'}), 400
+        
+    new_password = data['password']
+    if not new_password:
+        return jsonify({'success': False, 'message': '新密碼不能為空'}), 400
+        
+    try:
+        user = db.session.get(User, user_id)
+        if not user:
+            return jsonify({'success': False, 'message': '找不到指定的使用者'}), 404
+            
+        # 更新密碼
+        user.password_hash = generate_password_hash(new_password)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': '密碼重設成功'})
+    except Exception as e:
+        db.session.rollback()
+        print(f"重設密碼時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '重設密碼時發生伺服器錯誤。'}), 500
+
+@app.route('/api/users/<int:user_id>', methods=['DELETE'])
+@token_required
+@admin_required
+def delete_user(current_user, user_id):
+    """刪除使用者（需管理者權限）"""
+    try:
+        user = db.session.get(User, user_id)
+        if not user:
+            return jsonify({'success': False, 'message': '找不到指定的使用者'}), 404
+            
+        # 防止管理者刪除自己的帳號
+        if user.id == current_user.id:
+            return jsonify({'success': False, 'message': '無法刪除自己的帳號'}), 400
+            
+        db.session.delete(user)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': '使用者刪除成功'})
+    except Exception as e:
+        db.session.rollback()
+        print(f"刪除使用者時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '刪除使用者時發生伺服器錯誤。'}), 500
     
 # --- 公開 API ---
 @app.route('/api/media_with_settings', methods=['GET'])

@@ -151,3 +151,60 @@ export function uploadMediaWithProgress(formData, onProgress) {
         xhr.send(formData);
     });
 }
+
+/**
+ * Gets all users from the server.
+ * @returns {Promise<any>} - The JSON response containing users data.
+ */
+export function getUsers() {
+    return fetchWithAuth('/api/users');
+}
+
+/**
+ * Creates a new user.
+ * @param {object} userData - The user data (username, password, role, is_active).
+ * @returns {Promise<any>} - The JSON response from the server.
+ */
+export function createUser(userData) {
+    return fetchWithAuth('/api/users', {
+        method: 'POST',
+        body: JSON.stringify(userData)
+    });
+}
+
+/**
+ * Updates an existing user.
+ * @param {number} userId - The ID of the user to update.
+ * @param {object} updateData - The data to update (role, is_active).
+ * @returns {Promise<any>} - The JSON response from the server.
+ */
+export function updateUser(userId, updateData) {
+    return fetchWithAuth(`/api/users/${userId}`, {
+        method: 'PUT',
+        body: JSON.stringify(updateData)
+    });
+}
+
+/**
+ * Deletes a user.
+ * @param {number} userId - The ID of the user to delete.
+ * @returns {Promise<any>} - The JSON response from the server.
+ */
+export function deleteUser(userId) {
+    return fetchWithAuth(`/api/users/${userId}`, {
+        method: 'DELETE'
+    });
+}
+
+/**
+ * Resets a user's password.
+ * @param {number} userId - The ID of the user.
+ * @param {string} newPassword - The new password.
+ * @returns {Promise<any>} - The JSON response from the server.
+ */
+export function resetUserPassword(userId, newPassword) {
+    return fetchWithAuth(`/api/users/${userId}/password`, {
+        method: 'PUT',
+        body: JSON.stringify({ password: newPassword })
+    });
+}

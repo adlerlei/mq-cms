@@ -51,7 +51,8 @@ def test_user(test_app):
     user = User(
         username='testuser',
         password_hash=generate_password_hash('testpassword'),
-        role='admin'
+        role='admin',
+        is_active=True
     )
     db.session.add(user)
     db.session.commit()

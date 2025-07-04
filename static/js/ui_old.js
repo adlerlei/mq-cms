@@ -175,62 +175,6 @@ function renderGroupAssignmentDropdown() {
     }
 }
 
-/**
- * Renders the users table with the provided users data.
- * @param {Array} users - Array of user objects from the store.
- */
-export function renderUsersTable(users) {
-    const usersTableBody = document.getElementById('usersTableBody');
-    if (!usersTableBody) return;
-
-    if (!users || users.length === 0) {
-        usersTableBody.innerHTML = '<tr><td colspan="4" class="has-text-centered">目前沒有任何使用者。</td></tr>';
-        return;
-    }
-
-    usersTableBody.innerHTML = users.map(user => {
-        const statusTag = user.is_active 
-            ? '<span class="tag is-success">啟用</span>' 
-            : '<span class="tag is-danger">停用</span>';
-        
-        const roleTag = user.role === 'admin' 
-            ? '<span class="tag is-primary">管理員</span>' 
-            : '<span class="tag is-info">一般使用者</span>';
-
-        return `
-            <tr>
-                <td>${user.username}</td>
-                <td>${roleTag}</td>
-                <td>${statusTag}</td>
-                <td class="actions-cell has-text-right">
-                    <button class="button is-small is-info edit-user-button" 
-                            data-user-id="${user.id}" 
-                            data-user-username="${user.username}"
-                            data-user-role="${user.role}"
-                            data-user-active="${user.is_active}">
-                        編輯
-                    </button>
-                    <button class="button is-small is-warning reset-password-button" 
-                            data-user-id="${user.id}" 
-                            data-user-username="${user.username}">
-                        重設密碼
-                    </button>
-                    <button class="button is-small ${user.is_active ? 'is-warning' : 'is-success'} toggle-user-status-button" 
-                            data-user-id="${user.id}" 
-                            data-user-active="${user.is_active}">
-                        ${user.is_active ? '停用' : '啟用'}
-                    </button>
-                    <button class="button is-small is-danger delete-user-button" 
-                            data-user-id="${user.id}" 
-                            data-user-username="${user.username}">
-                        刪除
-                    </button>
-                </td>
-            </tr>
-        `;
-    }).join('');
-}
-
 
 // =========================================================================
 // UI Helpers & Actions
@@ -351,4 +295,60 @@ export function showNotification(message, type) {
     notification.textContent = message;
     notification.className = `notification ${type}`;
     setTimeout(() => { notification.className = 'notification is-hidden'; }, 3000);
+}
+
+/**
+ * Renders the users table with the provided users data.
+ * @param {Array} users - Array of user objects from the store.
+ */
+export function renderUsersTable(users) {
+    const usersTableBody = document.getElementById('usersTableBody');
+    if (!usersTableBody) return;
+
+    if (!users || users.length === 0) {
+        usersTableBody.innerHTML = '<tr><td colspan="4" class="has-text-centered">目前沒有任何使用者。</td></tr>';
+        return;
+    }
+
+    usersTableBody.innerHTML = users.map(user => {
+        const statusTag = user.is_active 
+            ? '<span class="tag is-success">啟用</span>' 
+            : '<span class="tag is-danger">停用</span>';
+        
+        const roleTag = user.role === 'admin' 
+            ? '<span class="tag is-primary">管理員</span>' 
+            : '<span class="tag is-info">一般使用者</span>';
+
+        return `
+            <tr>
+                <td>${user.username}</td>
+                <td>${roleTag}</td>
+                <td>${statusTag}</td>
+                <td class="actions-cell has-text-right">
+                    <button class="button is-small is-info edit-user-button" 
+                            data-user-id="${user.id}" 
+                            data-user-username="${user.username}"
+                            data-user-role="${user.role}"
+                            data-user-active="${user.is_active}">
+                        編輯
+                    </button>
+                    <button class="button is-small is-warning reset-password-button" 
+                            data-user-id="${user.id}" 
+                            data-user-username="${user.username}">
+                        重設密碼
+                    </button>
+                    <button class="button is-small ${user.is_active ? 'is-warning' : 'is-success'} toggle-user-status-button" 
+                            data-user-id="${user.id}" 
+                            data-user-active="${user.is_active}">
+                        ${user.is_active ? '停用' : '啟用'}
+                    </button>
+                    <button class="button is-small is-danger delete-user-button" 
+                            data-user-id="${user.id}" 
+                            data-user-username="${user.username}">
+                        刪除
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
 }
