@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MQ 內容管理系統</title>
+    <link rel="stylesheet" href="css/bulma.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+    <!-- 認證檢查載入畫面 -->
+    <div id="authCheckingScreen" class="auth-checking">
+        <div class="has-text-centered">
+            <div class="loader"></div>
+            <p class="mt-4">正在驗證身份...</p>
+        </div>
+    </div>
+
+    <!-- 主要內容 -->
+    <div id="mainContent" class="main-content">
+        <nav class="navbar is-primary" role="navigation">
+            <div class="container">
+                <div class="navbar-brand"><a class="navbar-item has-text-weight-bold" href="#">MQ 內容管理系統</a></div>
+                <div class="navbar-menu"><div class="navbar-end"><div class="navbar-item"><div class="buttons">
+                    <button id="logoutButton" class="button is-primary is-light">登出</button>
+                </div></div></div></div>
+            </div>
+        </nav>
+    <section class="section">
+        <div class="container">
+            <div class="columns is-multiline">
+                <!-- 新增媒體 / 指派內容 -->
+                <div class="column is-half">
+                    <div class="box">
+                        <h2 class="title is-4">新增媒體 / 指派內容</h2>
+                        <form id="uploadForm" action="" method="POST" enctype="multipart/form-data">
+                            <div class="field"><label class="label">操作類型</label><div class="control"><div class="select is-fullwidth"><select name="type" id="mediaTypeSelect" required><option value="image">上傳圖片並指派</option><option value="video">上傳影片並指派</option><option value="group_reference">指派輪播組</option></select></div></div></div>
+                            <div id="sectionKeyField" class="field"><label class="label">指派到區塊</label><div class="control"><div class="select is-fullwidth"><select name="section_key" id="sectionKeySelect"></select></div></div></div>
+                            <div id="fileUploadField" class="field">
+                                <label class="label">選擇檔案</label>
+                                <div class="control">
+                                    <div class="file has-name is-fullwidth">
+                                        <label class="file-label">
+                                            <input class="file-input" type="file" name="file" id="fileInput" accept="image/*,video/*">
+                                            <span class="file-cta">
+                                                <span class="file-icon"><i class="fas fa-upload"></i></span>
+                                                <span class="file-label">選擇檔案...</span>
+                                            </span>
+                                            <span class="file-name" id="fileName">未選擇檔案</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="groupSelectField" class="field" style="display: none;">
+                                <label class="label">選擇輪播組</label>
+                                <div class="control">
+                                    <div class="select is-fullwidth">
+                                        <select name="group_id" id="groupSelect">
+                                            <option value="">請選擇輪播組</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="field">
+                                <div class="control">
+                                    <button type="submit" class="button is-primary">
+                                        <span class="icon"><i class="fas fa-upload"></i></span>
+                                        <span>上傳並指派</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                        <div id="upload-progress-container">
+                            <progress id="upload-progress" class="progress is-primary" value="0" max="100">0%</progress>
+                            <p id="upload-status">準備上傳...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 輪播組管理 -->
+                <div class="column is-half">
+                    <div class="box">
+                        <h2 class="title is-4">輪播組管理</h2>
+                        <form id="createGroupForm">
+                            <div class="field">
+                                <label class="label">輪播組名稱</label>
+                                <div class="control">
+                                    <input class="input" type="text" name="name" placeholder="輸入輪播組名稱" required>
+                                </div>
+                            </div>
+                            <div class="field">
+                                <div class="control">
+                                    <button type="submit" class="button is-info">
+                                        <span class="icon"><i class="fas fa-plus"></i></span>
+                                        <span>建立輪播組</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- 使用者管理 -->
+                <div class="column is-half">
+                    <div class="box">
+                        <h2 class="title is-4">使用者管理</h2>
+                        <form id="createUserForm">
+                            <div class="field">
+                                <label class="label">使用者名稱</label>
+                                <div class="control">
+                                    <input class="input" type="text" name="username" placeholder="輸入使用者名稱" required>
+                                </div>
+                            </div>
+                            <div class="field">
+                                <label class="label">密碼</label>
+                                <div class="control">
+                                    <input class="input" type="password" name="password" placeholder="輸入密碼" required>
+                                </div>
+                            </div>
+                            <div class="field">
+                                <label class="label">角色</label>
+                                <div class="control">
+                                    <div class="select is-fullwidth">
+                                        <select name="role" required>
+                                            <option value="">請選擇角色</option>
+                                            <option value="admin">管理員</option>
+                                            <option value="user">一般使用者</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="field">
+                                <div class="control">
+                                    <button type="submit" class="button is-success">
+                                        <span class="icon"><i class="fas fa-user-plus"></i></span>
+                                        <span>新增使用者</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- 系統設定 -->
+                <div class="column is-half">
+                    <div class="box">
+                        <h2 class="title is-4">系統設定</h2>
+                        <form id="settingsForm">
+                            <div class="field">
+                                <label class="label">輪播間隔 (秒)</label>
+                                <div class="control">
+                                    <input class="input" type="number" name="carousel_interval" min="1" max="60" value="5">
+                                </div>
+                            </div>
+                            <div class="field">
+                                <div class="control">
+                                    <button type="submit" class="button is-warning">
+                                        <span class="icon"><i class="fas fa-save"></i></span>
+                                        <span>儲存設定</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 媒體列表 -->
+            <div class="box">
+                <h2 class="title is-4">媒體列表</h2>
+                <div id="mediaListContainer">
+                    <!-- 媒體列表將由 JavaScript 動態生成 -->
+                </div>
+            </div>
+
+            <!-- 輪播組列表 -->
+            <div class="box">
+                <h2 class="title is-4">輪播組列表</h2>
+                <div id="groupListContainer">
+                    <!-- 輪播組列表將由 JavaScript 動態生成 -->
+                </div>
+            </div>
+
+            <!-- 使用者列表 -->
+            <div class="box">
+                <h2 class="title is-4">使用者列表</h2>
+                <div id="userListContainer">
+                    <!-- 使用者列表將由 JavaScript 動態生成 -->
+                </div>
+            </div>
+        </div>
+    </section>
+    </div>
+
+    <!-- 輪播組編輯模態框 -->
+    <div class="modal" id="groupEditModal">
+        <div class="modal-background"></div>
+        <div class="modal-card">
+            <header class="modal-card-head">
+                <p class="modal-card-title">編輯輪播組</p>
+                <button class="delete" aria-label="close" id="closeGroupEditModal"></button>
+            </header>
+            <section class="modal-card-body">
+                <div class="field">
+                    <label class="label">輪播組名稱</label>
+                    <div class="control">
+                        <input class="input" type="text" id="editGroupName" placeholder="輸入輪播組名稱">
+                    </div>
+                </div>
+                
+                <div class="columns">
+                    <div class="column">
+                        <h4 class="title is-5">可用圖片</h4>
+                        <div class="available-images-list" id="availableImagesList">
+                            <!-- 可用圖片列表 -->
+                        </div>
+                    </div>
+                    <div class="column">
+                        <h4 class="title is-5">已選圖片</h4>
+                        <div class="selected-images-list" id="selectedImagesList">
+                            <!-- 已選圖片列表 -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+            <footer class="modal-card-foot">
+                <button class="button is-success" id="saveGroupChanges">儲存變更</button>
+                <button class="button" id="cancelGroupEdit">取消</button>
+            </footer>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script type="module" src="js/admin.js"></script>
+</body>
+</html>

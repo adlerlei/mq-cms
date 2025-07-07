@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登入 - MQ 內容管理系統</title>
+    <link rel="stylesheet" href="css/bulma.css">
+</head>
+
+<body>
+    <section class="hero is-fullheight">
+        <div class="hero-body">
+            <div class="container">
+                <div class="columns is-centered">
+                    <div class="column is-4-tablet is-3-desktop">
+                        <div class="card login-card">
+                            <div class="card-content">
+                                <h1 class="title has-text-centered">MQ 系統登入</h1>
+                                <p class="subtitle is-6 has-text-centered">請輸入您的憑證</p>
+                                
+                                <form id="loginForm">
+                                    <div class="field">
+                                        <label for="username" class="label">使用者名稱</label>
+                                        <div class="control has-icons-left">
+                                            <input type="text" class="input" id="username" name="username" placeholder="e.g. admin" required>
+                                            <span class="icon is-small is-left">
+                                                <svg class="svg-inline--fa" height="1em" viewBox="0 0 448 512"><path fill="currentColor" d="M224 256A128 128 0 1 0 224 0a128 128 0 1 0 0 256zm-45.7 48C79.8 304 0 383.8 0 482.3C0 498.7 13.3 512 29.7 512H418.3c16.4 0 29.7-13.3 29.7-29.7C448 383.8 368.2 304 269.7 304H178.3z"></path></svg>
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="field">
+                                        <label for="password" class="label">密碼</label>
+                                        <div class="control has-icons-left">
+                                            <input type="password" class="input" id="password" name="password" placeholder="********" required>
+                                            <span class="icon is-small is-left">
+                                                <svg class="svg-inline--fa" height="1em" viewBox="0 0 448 512"><path fill="currentColor" d="M144 144v48H304V144c0-44.2-35.8-80-80-80s-80 35.8-80 80zM80 192V144C80 64.5 144.5 0 224 0s144 64.5 144 144v48h16c35.3 0 64 28.7 64 64v192c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64V256c0-35.3 28.7-64 64-64H80z"></path></svg>
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div id="error-notification" class="notification is-danger is-light" style="display: none;"></div>
+                                    <div class="field">
+                                        <button type="submit" class="button is-primary is-fullwidth">登入</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const loginForm = document.getElementById('loginForm');
+        const errorNotification = document.getElementById('error-notification');
+        const submitButton = loginForm.querySelector('button[type="submit"]');
+
+        loginForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            errorNotification.style.display = 'none';
+            submitButton.classList.add('is-loading');
+
+            const username = event.target.username.value;
+            const password = event.target.password.value;
+
+            try {
+                // 後端 API 端點，需要修改為實際的 API 路徑
+                const response = await fetch("/api/login", {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username, password }),
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    localStorage.setItem('jwt_token', data.access_token);
+                    // 跳轉到後台
+                    window.location.href = "admin.html";
+                } else {
+                    throw new Error(data.message || '登入失敗，請檢查您的帳號密碼。');
+                }
+            } catch (error) {
+                errorNotification.textContent = error.message;
+                errorNotification.style.display = 'block';
+            } finally {
+                submitButton.classList.remove('is-loading');
+            }
+        });
+    });
+    </script>
+</body>
+</html>
