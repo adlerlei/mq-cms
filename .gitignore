@@ -15,3 +15,5 @@ static/uploads/
 media.json
 .vscode/
 settings.json
+coverage/
+node_modules/
