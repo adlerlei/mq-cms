@@ -1,5 +1,6 @@
 # ----------------------------------------------------------------
 # --- 最終、完整、可運行的整合版 app.py ---
+# --- v2: 已將 query.get() 更新為 db.session.get() ---
 # ----------------------------------------------------------------
 from flask import Flask, jsonify, render_template, request, redirect, url_for
 from flask_cors import CORS
@@ -7,6 +8,7 @@ from flask_socketio import SocketIO
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
 from functools import wraps
 import jwt
 import datetime
@@ -18,10 +20,11 @@ import stat
 # --- 應用程式與資料庫設定 ---
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-very-secret-and-secure-key-that-no-one-knows'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///mq_cms.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
+migrate = Migrate(app, db)
 CORS(app)
 socketio = SocketIO(app, async_mode='eventlet', cors_allowed_origins="*")
 
@@ -29,8 +32,7 @@ socketio = SocketIO(app, async_mode='eventlet', cors_allowed_origins="*")
 UPLOAD_FOLDER = 'static/uploads'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'mp4', 'mov', 'avi'}
-MEDIA_FILE = 'media.json'
-SETTINGS_FILE = 'settings.json'
+
 
 AVAILABLE_SECTIONS = {
     "header_video": "頁首影片/圖片輪播",
@@ -48,14 +50,78 @@ DEFAULT_PLAYBACK_SETTINGS = {
     "type": "_global_settings_"
 }
 
-# --- 使用者資料模型 ---
+# --- 資料庫模型 ---
 class User(db.Model):
     """使用者資料模型"""
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
     role = db.Column(db.String(80), nullable=False, default='admin')
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
     def __repr__(self): return f'<User {self.username}>'
+
+# 輪播群組與圖片的多對多關聯表 (改用 Association Object 來儲存順序)
+class GroupImageAssociation(db.Model):
+    __tablename__ = 'group_image_association'
+    group_id = db.Column(db.String(36), db.ForeignKey('carousel_group.id'), primary_key=True)
+    material_id = db.Column(db.String(36), db.ForeignKey('material.id'), primary_key=True)
+    order = db.Column(db.Integer, nullable=False)
+
+    material = db.relationship("Material", back_populates="group_associations")
+    group = db.relationship("CarouselGroup", back_populates="image_associations")
+
+class Setting(db.Model):
+    """儲存全域設定"""
+    __tablename__ = 'setting'
+    key = db.Column(db.String(50), primary_key=True)
+    value = db.Column(db.String(100), nullable=False)
+
+    def __repr__(self):
+        return f'<Setting {self.key}={self.value}>'
+
+class Material(db.Model):
+    """儲存媒體素材資訊"""
+    __tablename__ = 'material'
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    original_filename = db.Column(db.String(255), nullable=False)
+    filename = db.Column(db.String(255), unique=True, nullable=False)
+    type = db.Column(db.String(10), nullable=False)  # 'image' or 'video'
+    url = db.Column(db.String(255), nullable=False)
+    source = db.Column(db.String(20), default='global') # 'global' or 'group_specific'
+    
+    assignments = db.relationship('Assignment', backref='material', lazy=True, cascade="all, delete-orphan")
+    group_associations = db.relationship('GroupImageAssociation', back_populates='material', cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f'<Material {self.original_filename}>'
+
+class CarouselGroup(db.Model):
+    """儲存輪播群組"""
+    __tablename__ = 'carousel_group'
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = db.Column(db.String(100), nullable=False)
+    
+    image_associations = db.relationship('GroupImageAssociation', back_populates='group', lazy='dynamic', order_by='GroupImageAssociation.order', cascade="all, delete-orphan")
+    assignments = db.relationship('Assignment', backref='carousel_group', lazy=True, cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f'<CarouselGroup {self.name}>' 
+
+class Assignment(db.Model):
+    """儲存區塊內容指派"""
+    __tablename__ = 'assignment'
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    section_key = db.Column(db.String(50), nullable=False)
+    content_source_type = db.Column(db.String(20), nullable=False) # 'single_media' or 'group_reference'
+    offset = db.Column(db.Integer, default=0)
+    
+    # 外鍵
+    media_id = db.Column(db.String(36), db.ForeignKey('material.id'), nullable=True)
+    group_id = db.Column(db.String(36), db.ForeignKey('carousel_group.id'), nullable=True)
+
+    def __repr__(self):
+        return f'<Assignment {self.section_key}>'
+
 
 # --- 輔助函式 ---
 def allowed_file(filename):
@@ -64,43 +130,6 @@ def allowed_file(filename):
         return False
     extension = filename.rsplit('.', 1)[1].lower()
     return extension in ALLOWED_EXTENSIONS
-
-def load_media_data():
-    if not os.path.exists(MEDIA_FILE) or os.path.getsize(MEDIA_FILE) == 0: return []
-    """從 media.json 載入媒體資料"""
-    try:
-        with open(MEDIA_FILE, 'r', encoding='utf-8') as f: return json.load(f)
-    except Exception as e:
-        print(f"讀取 media.json 錯誤: {e}"); return []
-
-def save_media_data(data):
-    try:
-        """將媒體資料儲存到 media.json"""
-        with open(MEDIA_FILE, 'w', encoding='utf-8') as f: json.dump(data, f, indent=2, ensure_ascii=False)
-    except IOError as e: print(f"儲存 media.json 錯誤: {e}")
-
-def load_playback_settings():
-    """從 settings.json 載入播放設定，如果檔案不存在或為空，則使用預設設定"""
-    if not os.path.exists(SETTINGS_FILE) or os.path.getsize(SETTINGS_FILE) == 0:
-        return DEFAULT_PLAYBACK_SETTINGS.copy()
-    try:
-        with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
-            settings = json.load(f)
-            for key, default_value in DEFAULT_PLAYBACK_SETTINGS.items():
-                if key not in settings: settings[key] = default_value
-            return settings
-    except Exception as e:
-        print(f"讀取 settings.json 錯誤: {e}"); return DEFAULT_PLAYBACK_SETTINGS.copy()
-
-def save_playback_settings(settings_data):
-    """將播放設定儲存到 settings.json"""
-    try:
-        settings_to_save = DEFAULT_PLAYBACK_SETTINGS.copy()
-        settings_to_save.update(settings_data)
-        with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(settings_to_save, f, indent=2, ensure_ascii=False)
-    except IOError as e:
-        print(f"儲存 settings.json 錯誤: {e}")
 
 # --- JWT 認證裝飾器 ---
 def token_required(f):
@@ -141,6 +170,17 @@ def page_auth_required(f):
         return f(current_user, *args, **kwargs)
     return decorated
 
+def admin_required(f):
+    """管理者權限檢查裝飾器，需要在 token_required 之後使用"""
+    @wraps(f)
+    def decorated(current_user, *args, **kwargs):
+        if current_user.role != 'admin':
+            return jsonify({'message': '權限不足，需要管理者權限'}), 403
+        if not current_user.is_active:
+            return jsonify({'message': '帳戶已被停用'}), 403
+        return f(current_user, *args, **kwargs)
+    return decorated
+
 # --- 頁面渲染路由 ---
 @app.route('/')
 def login_page():
@@ -160,9 +200,50 @@ def login_redirect():
 @app.route('/admin')
 @app.route('/admin/')
 def admin_page():
-    """渲染管理員頁面，載入媒體資料和設定"""
-    media_items = load_media_data()
-    settings = load_playback_settings()
+    """渲染管理員頁面，從資料庫載入資料和設定"""
+    # 為了渲染範本，我們需要傳遞與舊結構類似的資料
+    # 但這些資料現在全部來自資料庫
+    
+    # 獲取設定
+    settings_from_db = Setting.query.all()
+    settings = {s.key: s.value for s in settings_from_db}
+
+    # 獲取所有素材和群組，並轉換為字典格式以相容舊的前端邏輯
+    all_materials = Material.query.all()
+    all_groups = CarouselGroup.query.all()
+    all_assignments = Assignment.query.all()
+
+    # 轉換為類似 media.json 的結構，以最大限度地減少對 admin.html 的更改
+    media_items = []
+    for m in all_materials:
+        media_items.append({
+            "id": m.id,
+            "original_filename": m.original_filename,
+            "filename": m.filename,
+            "type": m.type,
+            "url": m.url,
+            "source": m.source
+        })
+    
+    for g in all_groups:
+        media_items.append({
+            "id": g.id,
+            "name": g.name,
+            "type": 'carousel_group',
+            "image_ids": [assoc.material_id for assoc in g.image_associations]
+        })
+
+    for a in all_assignments:
+        media_items.append({
+            "id": a.id,
+            "type": 'section_assignment',
+            "section_key": a.section_key,
+            "content_source_type": a.content_source_type,
+            "media_id": a.media_id,
+            "group_id": a.group_id,
+            "offset": a.offset
+        })
+
     return render_template('admin.html', media_items=media_items, available_sections=AVAILABLE_SECTIONS, settings=settings)
 
 # --- 認證 API ---
@@ -175,324 +256,961 @@ def login():
     user = User.query.filter_by(username=auth.get('username')).first()
     if not user or not check_password_hash(user.password_hash, auth.get('password')):
         return jsonify({'message': '帳號或密碼錯誤'}), 401
+    
+    # 檢查帳戶是否啟用
+    if not user.is_active:
+        return jsonify({'message': '帳戶已被停用，請聯絡管理員'}), 403
+        
     token = jwt.encode({'username': user.username, 'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=8)}, app.config['SECRET_KEY'], algorithm="HS256")
     return jsonify({'access_token': token})
 
 # --- 受保護的管理 API ---
-@app.route('/admin/add', methods=['POST'])
+def _create_assignment_record(data):
+    """內部輔助函式，用於建立指派記錄。不執行 db.session.commit()。
+
+    Args:
+        data (dict-like): 包含指派資訊的字典，如 request.form 或自訂字典。
+
+    Returns:
+        tuple: (success, message_or_object) 成功時返回 (True, new_assignment)，失敗時返回 (False, error_message)。
+    """
+    section_key = data.get('section_key')
+    content_type = data.get('type')
+
+    if not section_key or not content_type:
+        return False, '缺少必要參數'
+
+    # 只有在指派輪播組時，才執行覆蓋性刪除
+    if content_type == 'group_reference':
+        Assignment.query.filter_by(section_key=section_key).delete()
+
+    if content_type == 'group_reference':
+        group_id = data.get('carousel_group_id')
+        offset = int(data.get('offset', 0))
+        if not group_id:
+            return False, '缺少輪播組ID'
+        
+        new_assignment = Assignment(
+            section_key=section_key,
+            content_source_type='group_reference',
+            group_id=group_id,
+            offset=offset
+        )
+        db.session.add(new_assignment)
+        return True, new_assignment
+
+    elif content_type in ['image', 'video', 'single_media']:
+        media_id = data.get('media_id')
+        if not media_id:
+            return False, '缺少媒體ID'
+        
+        new_assignment = Assignment(
+            section_key=section_key,
+            content_source_type='single_media',
+            media_id=media_id
+        )
+        db.session.add(new_assignment)
+        return True, new_assignment
+
+    else:
+        return False, '不支援的操作類型'
+
+@app.route('/api/assignments', methods=['POST'])
 @token_required
-def add_media_item(current_user):
-    """處理新增媒體項目或輪播群組指派的請求"""
+def create_assignment(current_user):
+    """處理新增內容指派的請求"""
     try:
-        media_type_action = request.form.get('type')
-        section_key_from_form = request.form.get('section_key')
-        media_items_db = load_media_data()
-        final_list_to_save = list(media_items_db)
-        new_item_object = None
+        success, result = _create_assignment_record(request.form)
+        if not success:
+            return jsonify({'success': False, 'message': result}), 400
 
-        if media_type_action in ['image', 'video']:
-            if 'file' not in request.files:
-                return jsonify({'message': '未找到上傳的檔案'}), 400
-                
-            file = request.files['file']
-            if file.filename == '':
-                return jsonify({'message': '未選擇檔案'}), 400
-
-            # 檢查檔案名稱格式
-            if not file.filename or file.filename == '':
-                return jsonify({'message': '檔案名稱不能為空'}), 400
-            
-            # 檢查是否有副檔名
-            if '.' not in file.filename:
-                return jsonify({'message': '檔案必須包含副檔名'}), 400
-            
-            # 使用 secure_filename 清理檔案名，但保留原始檔名作為備用
-            original_filename = file.filename
-            secure_name = secure_filename(file.filename)
-            
-            # 如果 secure_filename 清空了檔案名（通常是因為特殊字符），使用原始檔名的副檔名
-            if not secure_name or '.' not in secure_name:
-                file_extension = original_filename.rsplit('.', 1)[1].lower()
-                secure_name = f"upload.{file_extension}"
-
-            if not allowed_file(original_filename):
-                allowed_types = ", ".join(ALLOWED_EXTENSIONS)
-                return jsonify({'message': f'不支援的檔案類型。允許的類型：{allowed_types}'}), 400
-
-            new_material_id = str(uuid.uuid4())
-            file_extension = original_filename.rsplit('.', 1)[1].lower()
-            unique_filename = f"{new_material_id}.{file_extension}"
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
-            
-            # 確保上傳目錄存在並設置正確權限
-            os.makedirs(app.config['UPLOAD_FOLDER'], mode=0o755, exist_ok=True)
-            
-            # 調試信息：檢查目錄權限
-            dir_stat = os.stat(app.config['UPLOAD_FOLDER'])
-            print(f"Upload directory permissions: {oct(dir_stat.st_mode)}")
-            print(f"Upload directory owner: {dir_stat.st_uid}")
-            print(f"Current process user: {os.getuid()}")
-            print(f"Attempting to save file to: {filepath}")
-            
-            # 儲存檔案
-            file.save(filepath)
-            print(f"File saved successfully to: {filepath}")
-            
-            new_material_item = {
-                "id": new_material_id,
-                "original_filename": original_filename,
-                "filename": unique_filename,
-                "type": media_type_action,
-                "url": f"/{UPLOAD_FOLDER}/{unique_filename}"
-            }
-            final_list_to_save.append(new_material_item)
-
-            if section_key_from_form:
-                new_item_object = {
-                    "id": str(uuid.uuid4()),
-                    "type": "section_assignment",
-                    "section_key": section_key_from_form,
-                    "content_source_type": "single_media",
-                    "media_id": new_material_id
-                }
-                
-        elif media_type_action == 'carousel_reference':
-            group_id_referenced = request.form.get('carousel_group_id')
-            offset = int(request.form.get('offset', '0'))
-            if section_key_from_form and group_id_referenced:
-                final_list_to_save = [item for item in media_items_db if not (
-                    item.get('type') == 'section_assignment' and 
-                    item.get('section_key') == section_key_from_form
-                )]
-                new_item_object = {
-                    "id": str(uuid.uuid4()),
-                    "type": "section_assignment",
-                    "section_key": section_key_from_form,
-                    "content_source_type": "group_reference",
-                    "group_id": group_id_referenced,
-                    "offset": offset
-                }
-        
-        # If only a material was created (no direct assignment from the form)
-        if new_item_object is None and media_type_action in ['image', 'video']:
-            save_media_data(final_list_to_save)  # Save the material
-            socketio.emit('media_updated', {'message': '素材已新增!'})
-        elif new_item_object:  # If an assignment was created
-            final_list_to_save.append(new_item_object)
-            save_media_data(final_list_to_save)
-            socketio.emit('media_updated', {'message': '操作完成!'})
-        
-        return redirect(url_for('admin_page'))
+        db.session.commit()
+        socketio.emit('media_updated', {'message': '內容已成功指派！'})
+        return jsonify({'success': True, 'message': '指派成功'})
 
     except Exception as e:
-        print(f"處理請求時發生錯誤: {str(e)}")
-        return jsonify({'message': f'處理請求時發生錯誤: {str(e)}'}), 500
+        db.session.rollback()
+        print(f"建立指派時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '建立指派時發生伺服器錯誤。'}), 500
 
-@app.route('/admin/reassign', methods=['POST'])
-@token_required
-def reassign_media(current_user):
-    """處理重新指派未使用素材的請求"""
+@app.route('/api/materials', methods=['GET'])
+def get_materials():
+    """獲取所有媒體素材"""
     try:
-        media_id = request.form.get('media_id')
+        materials = Material.query.all()
+        materials_data = []
+        for material in materials:
+            materials_data.append({
+                'id': material.id,
+                'original_filename': material.original_filename,
+                'filename': material.filename,
+                'type': material.type,
+                'url': material.url,
+                'source': material.source
+            })
+        return jsonify({'success': True, 'data': materials_data})
+    except Exception as e:
+        print(f"獲取素材時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '獲取素材時發生伺服器錯誤。'}), 500
+
+@app.route('/api/materials/<material_id>', methods=['GET'])
+def get_material(material_id):
+    """獲取單個媒體素材詳細資訊"""
+    try:
+        material = db.session.get(Material, material_id)
+        if not material:
+            return jsonify({'success': False, 'message': '找不到指定的素材'}), 404
+            
+        material_data = {
+            'id': material.id,
+            'original_filename': material.original_filename,
+            'filename': material.filename,
+            'type': material.type,
+            'url': material.url,
+            'source': material.source,
+            'assignments': [],
+            'groups': []
+        }
+        
+        # 添加指派資訊
+        for assignment in material.assignments:
+            material_data['assignments'].append({
+                'id': assignment.id,
+                'section_key': assignment.section_key,
+                'content_source_type': assignment.content_source_type
+            })
+            
+        # 添加群組資訊
+        for assoc in material.group_associations:
+            if assoc.group:
+                material_data['groups'].append({
+                    'id': assoc.group.id,
+                    'name': assoc.group.name,
+                    'order': assoc.order
+                })
+                
+        return jsonify({'success': True, 'data': material_data})
+    except Exception as e:
+        print(f"獲取素材詳細資訊時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '獲取素材詳細資訊時發生伺服器錯誤。'}), 500
+
+@app.route('/api/materials', methods=['POST'])
+@token_required
+def upload_material(current_user):
+    """上傳新的媒體檔案，並可選擇性地直接指派"""
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'message': '未找到上傳的檔案'}), 400
+
+    file = request.files['file']
+    if file.filename == '' or not allowed_file(file.filename):
+        return jsonify({'success': False, 'message': '檔案類型不支援或未選擇檔案'}), 400
+
+    try:
+        original_display_filename = file.filename
+        file_extension = original_display_filename.rsplit('.', 1)[1].lower()
+        media_type = 'image' if file_extension in {'png', 'jpg', 'jpeg', 'gif'} else 'video'
+        
+        # 統一使用一個 UUID 作為 ID 和檔名基礎
+        material_id = str(uuid.uuid4())
+        unique_filename = f"{material_id}.{file_extension}"
+
+        new_material = Material(
+            id=material_id,
+            original_filename=original_display_filename,
+            filename=unique_filename,
+            type=media_type,
+            url=f"/{UPLOAD_FOLDER}/{unique_filename}"
+        )
+
+        # 檢查是否需要同時建立指派
         section_key = request.form.get('section_key')
-        media_type = request.form.get('type')
+        if section_key:
+            assignment_data = {
+                'section_key': section_key,
+                'type': 'single_media',
+                'media_id': new_material.id  # 現在這裡有值了
+            }
+            success, result_or_message = _create_assignment_record(assignment_data)
+            if not success:
+                # 指派失敗，直接返回錯誤，不儲存任何東西
+                return jsonify({'success': False, 'message': f'素材上傳成功，但指派失敗: {result_or_message}'}), 400
 
-        if not media_id or not section_key or not media_type:
-            return jsonify({'message': '缺少必要參數'}), 400
+        # 將素材加入資料庫 session
+        db.session.add(new_material)
 
-        media_items = load_media_data()
+        # 儲存實體檔案
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], new_material.filename)
+        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+        file.save(filepath)
 
-        # 檢查素材是否存在
-        media_exists = any(item.get('id') == media_id and item.get('type') in ['image', 'video']
-                          for item in media_items)
-        if not media_exists:
-            return jsonify({'message': '找不到指定的素材'}), 404
+        # 一次性提交所有變更 (素材和指派)
+        db.session.commit()
 
-        # 創建新的指派
-        new_assignment = {
-            "id": str(uuid.uuid4()),
-            "type": "section_assignment",
-            "section_key": section_key,
-            "content_source_type": "single_media",
-            "media_id": media_id
+        material_data = {
+            'id': new_material.id,
+            'original_filename': new_material.original_filename,
+            'filename': new_material.filename,
+            'type': new_material.type,
+            'url': new_material.url,
+            'source': new_material.source
         }
 
-        media_items.append(new_assignment)
-        save_media_data(media_items)
-        socketio.emit('media_updated', {'message': '素材已重新指派!'})
-
-        return jsonify({'success': True, 'message': '重新指派成功'})
+        socketio.emit('media_updated', {'message': '素材已成功上傳！'})
+        return jsonify({'success': True, 'message': '上傳成功', 'data': material_data}), 201
 
     except Exception as e:
-        print(f"重新指派時發生錯誤: {str(e)}")
-        return jsonify({'message': f'重新指派時發生錯誤: {str(e)}'}), 500
+        db.session.rollback()
+        print(f"上傳素材時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '上傳素材時發生伺服器錯誤。'}), 500
 
 
-@app.route('/admin/delete/<item_id_to_delete>', methods=['POST'])
+@app.route('/api/materials/<item_id_to_delete>', methods=['DELETE'])
 @token_required
-def delete_media_item(current_user, item_id_to_delete):
-    """處理刪除媒體項目或輪播群組指派的請求，並刪除相關的實體檔案"""
-    media_items = load_media_data()
-    item_to_delete = None
-    
-    # 在過濾前，先找到要被刪除的項目
-    for item in media_items:
-        if item.get('id') == item_id_to_delete:
-            item_to_delete = item
-            break
+def delete_material(current_user, item_id_to_delete):
+    """處理刪除媒體素材的請求"""
+    try:
+        material_to_delete = db.session.get(Material, item_id_to_delete)
+        if not material_to_delete:
+            return jsonify({'success': False, 'message': '找不到要刪除的素材'}), 404
 
-    # 如果找到了要刪除的項目，並且它是'image'或'video'類型的素材
-    if item_to_delete and item_to_delete.get('type') in ['image', 'video']:
-        filename = item_to_delete.get('filename') # This should now be the unique filename
-        if filename:
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            try:
-                # 檢查檔案是否存在，然後刪除它
-                if os.path.exists(filepath):
+        # 刪除實體檔案
+        if material_to_delete.filename:
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], material_to_delete.filename)
+            if os.path.exists(filepath):
+                try:
                     os.remove(filepath)
                     print(f"已成功刪除實體檔案: {filepath}")
-            except OSError as e:
-                print(f"刪除檔案時發生錯誤 {filepath}: {e}")
+                except OSError as e:
+                    print(f"刪除檔案時發生錯誤 {filepath}: {e}")
+        
+        # 刪除資料庫記錄 (關聯的 Assignment 和 GroupImageAssociation 會自動級聯刪除)
+        db.session.delete(material_to_delete)
+        db.session.commit()
 
-    # 從列表中移除該項目的 JSON 記錄 (無論是素材還是指派)
-    final_list = [item for item in media_items if item.get('id') != item_id_to_delete]
-    
-    # 檢查是否有任何指派正在使用即將被刪除的素材
-    if item_to_delete and item_to_delete.get('type') in ['image', 'video']:
-        material_id = item_to_delete.get('id')
-        # 從列表中也移除引用了此素材的 'section_assignment'
-        final_list = [
-            item for item in final_list 
-            if not (item.get('type') == 'section_assignment' and item.get('media_id') == material_id)
-        ]
-        # Also remove the material from any carousel groups it was part of
-        for item in final_list:
-            if item.get('type') == 'carousel_group' and 'image_ids' in item:
-                item['image_ids'] = [img_id for img_id in item['image_ids'] if img_id != material_id]
+        socketio.emit('media_updated', {'message': '素材已刪除!'})
+        return jsonify({'success': True, 'message': '刪除成功'})
 
+    except Exception as e:
+        db.session.rollback()
+        print(f"刪除素材時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '刪除素材時發生伺服器錯誤。'}), 500
 
-    save_media_data(final_list)
-    socketio.emit('media_updated', {'message': '項目已刪除!'})
-    # 刪除後返回 JSON 響應，讓前端 JS 處理刷新，這是更好的 API 設計
-    return jsonify({'success': True, 'message': '刪除成功'})
-
-@app.route('/admin/settings/update', methods=['POST'])
-@token_required
-def update_global_settings(current_user):
-    """處理更新全域播放設定的請求"""
-    data = request.json
+@app.route('/api/assignments', methods=['GET'])
+def get_assignments():
+    """獲取所有內容指派"""
     try:
-        new_settings = {
-            "header_interval": int(data['header_interval']),
-            "carousel_interval": int(data['carousel_interval']),
-            "footer_interval": int(data['footer_interval'])
+        assignments = Assignment.query.all()
+        assignments_data = []
+        for assignment in assignments:
+            assignment_data = {
+                'id': assignment.id,
+                'section_key': assignment.section_key,
+                'content_source_type': assignment.content_source_type,
+                'offset': assignment.offset,
+                'media_id': assignment.media_id,
+                'group_id': assignment.group_id
+            }
+            
+            # 添加相關資料
+            if assignment.material:
+                assignment_data['material'] = {
+                    'id': assignment.material.id,
+                    'original_filename': assignment.material.original_filename,
+                    'type': assignment.material.type,
+                    'url': assignment.material.url
+                }
+            
+            if assignment.carousel_group:
+                assignment_data['group'] = {
+                    'id': assignment.carousel_group.id,
+                    'name': assignment.carousel_group.name
+                }
+                
+            assignments_data.append(assignment_data)
+            
+        return jsonify({'success': True, 'data': assignments_data})
+    except Exception as e:
+        print(f"獲取指派時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '獲取指派時發生伺服器錯誤。'}), 500
+
+@app.route('/api/assignments/<assignment_id>', methods=['GET'])
+def get_assignment(assignment_id):
+    """獲取單個內容指派詳細資訊"""
+    try:
+        assignment = db.session.get(Assignment, assignment_id)
+        if not assignment:
+            return jsonify({'success': False, 'message': '找不到指定的指派'}), 404
+            
+        assignment_data = {
+            'id': assignment.id,
+            'section_key': assignment.section_key,
+            'content_source_type': assignment.content_source_type,
+            'offset': assignment.offset,
+            'media_id': assignment.media_id,
+            'group_id': assignment.group_id
         }
-        save_playback_settings(new_settings)
-        socketio.emit('settings_updated', new_settings)
+        
+        # 添加相關資料
+        if assignment.material:
+            assignment_data['material'] = {
+                'id': assignment.material.id,
+                'original_filename': assignment.material.original_filename,
+                'filename': assignment.material.filename,
+                'type': assignment.material.type,
+                'url': assignment.material.url
+            }
+        
+        if assignment.carousel_group:
+            assignment_data['group'] = {
+                'id': assignment.carousel_group.id,
+                'name': assignment.carousel_group.name,
+                'image_count': len(list(assignment.carousel_group.image_associations))
+            }
+            
+        return jsonify({'success': True, 'data': assignment_data})
+    except Exception as e:
+        print(f"獲取指派詳細資訊時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '獲取指派詳細資訊時發生伺服器錯誤。'}), 500
+
+@app.route('/api/assignments/<assignment_id>', methods=['PUT'])
+@token_required
+def update_assignment(current_user, assignment_id):
+    """更新內容指派"""
+    data = request.json
+    if not data:
+        return jsonify({'success': False, 'message': '請求資料不能為空'}), 400
+        
+    try:
+        assignment = db.session.get(Assignment, assignment_id)
+        if not assignment:
+            return jsonify({'success': False, 'message': '找不到指定的指派'}), 404
+            
+        # 更新指派資訊
+        if 'section_key' in data:
+            assignment.section_key = data['section_key']
+        if 'offset' in data:
+            assignment.offset = int(data['offset'])
+        if 'media_id' in data:
+            assignment.media_id = data['media_id']
+            assignment.group_id = None  # 清除群組關聯
+            assignment.content_source_type = 'single_media'
+        if 'group_id' in data:
+            assignment.group_id = data['group_id']
+            assignment.media_id = None  # 清除媒體關聯
+            assignment.content_source_type = 'group_reference'
+            
+        db.session.commit()
+        
+        assignment_data = {
+            'id': assignment.id,
+            'section_key': assignment.section_key,
+            'content_source_type': assignment.content_source_type,
+            'offset': assignment.offset,
+            'media_id': assignment.media_id,
+            'group_id': assignment.group_id
+        }
+        
+        socketio.emit('media_updated', {'message': '指派已更新!'})
+        return jsonify({'success': True, 'message': '指派更新成功', 'data': assignment_data})
+    except Exception as e:
+        db.session.rollback()
+        print(f"更新指派時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '更新指派時發生伺服器錯誤。'}), 500
+
+@app.route('/api/assignments/<assignment_id_to_delete>', methods=['DELETE'])
+@token_required
+def delete_assignment(current_user, assignment_id_to_delete):
+    """刪除內容指派"""
+    try:
+        assignment_to_delete = db.session.get(Assignment, assignment_id_to_delete)
+        if not assignment_to_delete:
+            return jsonify({'success': False, 'message': '找不到要刪除的指派'}), 404
+
+        db.session.delete(assignment_to_delete)
+        db.session.commit()
+
+        socketio.emit('media_updated', {'message': '指派已刪除!'})
+        return jsonify({'success': True, 'message': '刪除成功'})
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"刪除指派時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '刪除指派時發生伺服器錯誤。'}), 500
+
+# --- Settings API ---
+@app.route('/api/settings', methods=['GET'])
+def get_settings():
+    """獲取所有設定"""
+    try:
+        settings_from_db = Setting.query.all()
+        settings = {s.key: s.value for s in settings_from_db}
+        return jsonify({'success': True, 'data': settings})
+    except Exception as e:
+        print(f"獲取設定時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '獲取設定時發生伺服器錯誤。'}), 500
+
+@app.route('/api/settings', methods=['PUT'])
+@token_required
+def update_settings(current_user):
+    """更新全域播放設定"""
+    data = request.json
+    if not data:
+        return jsonify({'success': False, 'message': '請求資料不能為空'}), 400
+        
+    try:
+        # 遍歷收到的設定並更新資料庫
+        for key, value in data.items():
+            setting_to_update = db.session.get(Setting, key)
+            if setting_to_update:
+                setting_to_update.value = str(value)
+            else:
+                # 如果設定不存在，創建新的設定
+                new_setting = Setting(key=key, value=str(value))
+                db.session.add(new_setting)
+        
+        db.session.commit()
+        
+        # 通知前端更新
+        socketio.emit('settings_updated', data)
         return jsonify({'success': True, 'message': '設定已成功儲存！'})
     except (ValueError, TypeError):
+        db.session.rollback()
         return jsonify({'success': False, 'message': '輸入的值無效。'}), 400
+    except Exception as e:
+        db.session.rollback()
+        print(f"更新設定時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '儲存設定時發生伺服器錯誤。'}), 500
 
-@app.route('/admin/carousel_group/create', methods=['POST'])
+# --- 向後兼容的舊端點 ---
+@app.route('/admin/settings/update', methods=['POST'])
 @token_required
-def create_carousel_group(current_user):
-    """處理建立新的輪播群組的請求"""
-    group_name = request.form.get('group_name')
+def update_global_settings_legacy(current_user):
+    """向後兼容的設定更新端點"""
+    return update_settings(current_user)
+
+# --- Groups API ---
+@app.route('/api/groups', methods=['GET'])
+def get_groups():
+    """獲取所有輪播群組"""
+    try:
+        groups = CarouselGroup.query.all()
+        groups_data = []
+        for group in groups:
+            groups_data.append({
+                'id': group.id,
+                'name': group.name,
+                'image_ids': [assoc.material_id for assoc in group.image_associations],
+                'image_count': len(list(group.image_associations))
+            })
+        return jsonify({'success': True, 'data': groups_data})
+    except Exception as e:
+        print(f"獲取群組時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '獲取群組時發生伺服器錯誤。'}), 500
+
+@app.route('/api/groups/<group_id>', methods=['GET'])
+def get_group(group_id):
+    """獲取單個輪播群組詳細資訊"""
+    try:
+        group = db.session.get(CarouselGroup, group_id)
+        if not group:
+            return jsonify({'success': False, 'message': '找不到指定的群組'}), 404
+            
+        group_data = {
+            'id': group.id,
+            'name': group.name,
+            'image_ids': [assoc.material_id for assoc in group.image_associations],
+            'images': []
+        }
+        
+        # 獲取群組中的所有圖片詳細資訊
+        for assoc in group.image_associations:
+            if assoc.material:
+                group_data['images'].append({
+                    'id': assoc.material.id,
+                    'original_filename': assoc.material.original_filename,
+                    'filename': assoc.material.filename,
+                    'url': assoc.material.url,
+                    'order': assoc.order
+                })
+                
+        return jsonify({'success': True, 'data': group_data})
+    except Exception as e:
+        print(f"獲取群組詳細資訊時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '獲取群組詳細資訊時發生伺服器錯誤。'}), 500
+
+@app.route('/api/groups', methods=['POST'])
+@token_required
+def create_group(current_user):
+    """建立新的輪播群組"""
+    # 支援兩種資料格式：JSON 和 form-data
+    if request.is_json:
+        data = request.json
+        group_name = data.get('name') if data else None
+    else:
+        group_name = request.form.get('group_name') or request.form.get('name')
+        
     if not group_name:
         return jsonify({'success': False, 'message': '群組名稱不能為空'}), 400
-    media_items = load_media_data()
-    new_group = {"id": str(uuid.uuid4()), "type": "carousel_group", "name": group_name, "image_ids": []}
-    media_items.append(new_group)
-    save_media_data(media_items)
-    socketio.emit('media_updated', {'message': '群組已建立!'})
-    return jsonify({'success': True, 'message': '群組建立成功'})
+    
+    try:
+        new_group = CarouselGroup(name=group_name)
+        db.session.add(new_group)
+        db.session.commit()
+        
+        group_data = {
+            'id': new_group.id,
+            'name': new_group.name,
+            'image_ids': [],
+            'image_count': 0
+        }
+        
+        socketio.emit('media_updated', {'message': '群組已建立!'})
+        return jsonify({'success': True, 'message': '群組建立成功', 'data': group_data}), 201
+    except Exception as e:
+        db.session.rollback()
+        print(f"建立群組時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '建立群組時發生伺服器錯誤。'}), 500
 
+@app.route('/api/groups/<group_id>', methods=['PUT'])
+@token_required
+def update_group(current_user, group_id):
+    """更新輪播群組資訊"""
+    data = request.json
+    if not data:
+        return jsonify({'success': False, 'message': '請求資料不能為空'}), 400
+        
+    try:
+        group = db.session.get(CarouselGroup, group_id)
+        if not group:
+            return jsonify({'success': False, 'message': '找不到指定的群組'}), 404
+            
+        # 更新群組名稱
+        if 'name' in data:
+            group.name = data['name']
+            
+        db.session.commit()
+        
+        group_data = {
+            'id': group.id,
+            'name': group.name,
+            'image_ids': [assoc.material_id for assoc in group.image_associations],
+            'image_count': len(list(group.image_associations))
+        }
+        
+        socketio.emit('media_updated', {'message': '群組資訊已更新!'})
+        return jsonify({'success': True, 'message': '群組更新成功', 'data': group_data})
+    except Exception as e:
+        db.session.rollback()
+        print(f"更新群組時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '更新群組時發生伺服器錯誤。'}), 500
+
+@app.route('/api/groups/<group_id>', methods=['DELETE'])
+@token_required
+def delete_group(current_user, group_id):
+    """刪除輪播群組"""
+    try:
+        group_to_delete = db.session.get(CarouselGroup, group_id)
+        if not group_to_delete:
+            return jsonify({'success': False, 'message': '找不到要刪除的群組'}), 404
+
+        # 找出並刪除群組專屬的圖片實體檔案
+        material_ids_in_group = [assoc.material_id for assoc in group_to_delete.image_associations]
+        group_specific_images = Material.query.filter(
+            Material.source == 'group_specific',
+            Material.id.in_(material_ids_in_group)
+        ).all()
+        for image_item in group_specific_images:
+            if image_item.filename:
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], image_item.filename)
+                if os.path.exists(filepath):
+                    try:
+                        os.remove(filepath)
+                        print(f"已刪除群組專屬圖片檔案: {filepath}")
+                    except OSError as e:
+                        print(f"刪除群組專屬圖片檔案時發生錯誤 {filepath}: {e}")
+            # 從資料庫刪除圖片記錄
+            db.session.delete(image_item)
+
+        # 刪除群組本身 (關聯的 Assignment 和 GroupImageAssociation 會自動級聯刪除)
+        db.session.delete(group_to_delete)
+        db.session.commit()
+        
+        socketio.emit('media_updated', {'message': '群組及其專屬圖片已刪除！'})
+        return jsonify({'success': True, 'message': '群組刪除成功'})
+    except Exception as e:
+        db.session.rollback()
+        print(f"刪除群組時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '刪除群組時發生伺服器錯誤。'}), 500
+
+# --- 向後兼容的舊端點 ---
+@app.route('/admin/carousel_group/create', methods=['POST'])
+@token_required
+def create_carousel_group_legacy(current_user):
+    """向後兼容的群組建立端點"""
+    return create_group(current_user)
+
+@app.route('/api/groups/<group_id>/images', methods=['POST'])
+@token_required
+def upload_group_images(current_user, group_id):
+    """上傳圖片到指定群組"""
+    try:
+        group = db.session.get(CarouselGroup, group_id)
+        if not group:
+            return jsonify({'success': False, 'message': '找不到指定的群組'}), 404
+
+        if 'files' not in request.files:
+            return jsonify({'success': False, 'message': '沒有選擇檔案'}), 400
+
+        files = request.files.getlist('files')
+        if not files or all(file.filename == '' for file in files):
+            return jsonify({'success': False, 'message': '沒有選擇有效的檔案'}), 400
+
+        uploaded_image_objects = []
+        
+        for file in files:
+            if file and file.filename != '' and allowed_file(file.filename):
+                file_extension = file.filename.rsplit('.', 1)[1].lower()
+                if file_extension not in {'png', 'jpg', 'jpeg', 'gif'}: continue
+
+                new_material_id = str(uuid.uuid4())
+                unique_filename = f"{new_material_id}.{file_extension}"
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+                os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+                file.save(filepath)
+
+                new_material = Material(
+                    id=new_material_id,
+                    original_filename=file.filename,
+                    filename=unique_filename,
+                    type='image',
+                    source='group_specific',
+                    url=f"/{UPLOAD_FOLDER}/{unique_filename}"
+                )
+                db.session.add(new_material)
+
+                # 將新圖片加入到群組的末尾
+                max_order = db.session.query(db.func.max(GroupImageAssociation.order)).filter_by(group_id=group_id).scalar() or -1
+                new_assoc = GroupImageAssociation(group_id=group_id, material_id=new_material_id, order=max_order + 1)
+                db.session.add(new_assoc)
+
+                uploaded_image_objects.append({
+                    "id": new_material.id,
+                    "original_filename": new_material.original_filename,
+                    "filename": new_material.filename,
+                    "type": new_material.type,
+                    "source": new_material.source,
+                    "group_id": group_id,
+                    "group_name": group.name,
+                    "url": new_material.url
+                })
+        
+        if uploaded_image_objects:
+            db.session.commit()
+            return jsonify({
+                'success': True, 
+                'message': f'成功上傳 {len(uploaded_image_objects)} 張圖片',
+                'data': uploaded_image_objects
+            }), 201
+        else:
+            return jsonify({'success': False, 'message': '沒有成功上傳任何圖片，請檢查檔案格式'}), 400
+            
+    except Exception as e:
+        db.session.rollback()
+        print(f"群組上傳圖片時發生錯誤: {str(e)}")
+        return jsonify({'success': False, 'message': f'上傳失敗: {str(e)}'}), 500
+
+@app.route('/api/groups/<group_id>/images', methods=['PUT'])
+@token_required
+def update_group_images(current_user, group_id):
+    """更新群組中圖片的順序"""
+    data = request.get_json()
+    if not data or 'image_ids' not in data:
+        return jsonify({'success': False, 'message': '請求無效，缺少 image_ids 參數'}), 400
+
+    try:
+        group = db.session.get(CarouselGroup, group_id)
+        if not group:
+            return jsonify({'success': False, 'message': '找不到群組'}), 404
+
+        # 刪除舊的關聯
+        GroupImageAssociation.query.filter_by(group_id=group_id).delete()
+
+        # 建立新的關聯，並儲存順序
+        for index, image_id in enumerate(data['image_ids']):
+            # 確保圖片存在
+            if db.session.get(Material, image_id):
+                new_assoc = GroupImageAssociation(group_id=group_id, material_id=image_id, order=index)
+                db.session.add(new_assoc)
+        
+        db.session.commit()
+        
+        # 獲取更新後的群組資訊
+        updated_group_data = {
+            'id': group.id,
+            'name': group.name,
+            'image_ids': data['image_ids'],
+            'image_count': len(data['image_ids'])
+        }
+        
+        socketio.emit('media_updated', {'message': '圖片順序已更新!'})
+        return jsonify({'success': True, 'message': '圖片順序已儲存', 'data': updated_group_data})
+    except Exception as e:
+        db.session.rollback()
+        print(f"更新群組圖片時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '更新群組圖片時發生伺服器錯誤。'}), 500
+
+# --- 向後兼容的舊端點 ---
 @app.route('/admin/carousel_group/delete/<group_id_to_delete>', methods=['POST'])
 @token_required
-def delete_carousel_group(current_user, group_id_to_delete):
-    """處理刪除輪播群組的請求，同時移除所有引用該群組的指派"""
-    media_items = load_media_data()
-    final_list = [item for item in media_items if item.get('id') != group_id_to_delete and item.get('group_id') != group_id_to_delete]
-    if len(final_list) < len(media_items):
-        save_media_data(final_list)
-        socketio.emit('media_updated', {'message': '群組已刪除!'})
-        return jsonify({'success': True, 'message': '群組刪除成功'})
-    else:
-        return jsonify({'success': False, 'message': '找不到要刪除的群組'}), 404
+def delete_carousel_group_legacy(current_user, group_id_to_delete):
+    """向後兼容的群組刪除端點"""
+    return delete_group(current_user, group_id_to_delete)
+
+@app.route('/admin/carousel_group/upload_images/<group_id>', methods=['POST'])
+@token_required
+def upload_images_to_group_legacy(current_user, group_id):
+    """向後兼容的群組圖片上傳端點"""
+    return upload_group_images(current_user, group_id)
 
 @app.route('/admin/carousel_group/update_images/<group_id>', methods=['POST'])
 @token_required
-def update_carousel_group_images(current_user, group_id):
-    """處理更新輪播群組中圖片順序的請求"""
-    data = request.get_json()
-    if not data or 'image_ids' not in data: return jsonify({'success': False, 'message': '請求無效'}), 400
-    media_items = load_media_data()
-    group_found = False
-    for item in media_items:
-        if item.get('id') == group_id and item.get('type') == 'carousel_group':
-            item['image_ids'] = data['image_ids']
-            group_found = True
-            break
-    if group_found:
-        save_media_data(media_items)
-        socketio.emit('media_updated', {'message': '圖片順序已更新!'})
-        return jsonify({'success': True, 'message': '圖片順序已儲存'})
-    return jsonify({'success': False, 'message': '找不到群組'}), 404
+def update_carousel_group_images_legacy(current_user, group_id):
+    """向後兼容的群組圖片順序更新端點"""
+    return update_group_images(current_user, group_id)
+
+# --- 使用者管理 API ---
+@app.route('/api/users', methods=['GET'])
+@token_required
+@admin_required
+def get_users(current_user):
+    """取得所有使用者列表（需管理者權限）"""
+    try:
+        users = User.query.all()
+        users_data = []
+        for user in users:
+            users_data.append({
+                'id': user.id,
+                'username': user.username,
+                'role': user.role,
+                'is_active': user.is_active
+            })
+        return jsonify({'success': True, 'data': users_data})
+    except Exception as e:
+        print(f"獲取使用者列表時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '獲取使用者列表時發生伺服器錯誤。'}), 500
+
+@app.route('/api/users', methods=['POST'])
+@token_required
+@admin_required
+def create_user(current_user):
+    """建立新使用者（需管理者權限）"""
+    data = request.json
+    if not data:
+        return jsonify({'success': False, 'message': '請求資料不能為空'}), 400
+        
+    username = data.get('username')
+    password = data.get('password')
+    role = data.get('role', 'admin')
+    is_active = data.get('is_active', True)
+    
+    if not username or not password:
+        return jsonify({'success': False, 'message': '使用者名稱和密碼為必填欄位'}), 400
+        
+    try:
+        # 檢查使用者名稱是否已存在
+        existing_user = User.query.filter_by(username=username).first()
+        if existing_user:
+            return jsonify({'success': False, 'message': '使用者名稱已存在'}), 400
+            
+        # 建立新使用者
+        new_user = User(
+            username=username,
+            password_hash=generate_password_hash(password),
+            role=role,
+            is_active=is_active
+        )
+        
+        db.session.add(new_user)
+        db.session.commit()
+        
+        user_data = {
+            'id': new_user.id,
+            'username': new_user.username,
+            'role': new_user.role,
+            'is_active': new_user.is_active
+        }
+        
+        return jsonify({'success': True, 'message': '使用者建立成功', 'data': user_data}), 201
+    except Exception as e:
+        db.session.rollback()
+        print(f"建立使用者時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '建立使用者時發生伺服器錯誤。'}), 500
+
+@app.route('/api/users/<int:user_id>', methods=['PUT'])
+@token_required
+@admin_required
+def update_user(current_user, user_id):
+    """更新指定使用者的資訊（需管理者權限）"""
+    data = request.json
+    if not data:
+        return jsonify({'success': False, 'message': '請求資料不能為空'}), 400
+        
+    try:
+        user = db.session.get(User, user_id)
+        if not user:
+            return jsonify({'success': False, 'message': '找不到指定的使用者'}), 404
+            
+        # 防止管理者剝奪自己的管理權限或停用自己的帳號
+        if user.id == current_user.id:
+            if 'role' in data and data['role'] != 'admin':
+                return jsonify({'success': False, 'message': '無法修改自己的角色權限'}), 400
+            if 'is_active' in data and not data['is_active']:
+                return jsonify({'success': False, 'message': '無法停用自己的帳號'}), 400
+                
+        # 更新使用者資訊
+        if 'role' in data:
+            user.role = data['role']
+        if 'is_active' in data:
+            user.is_active = data['is_active']
+            
+        db.session.commit()
+        
+        user_data = {
+            'id': user.id,
+            'username': user.username,
+            'role': user.role,
+            'is_active': user.is_active
+        }
+        
+        return jsonify({'success': True, 'message': '使用者資訊更新成功', 'data': user_data})
+    except Exception as e:
+        db.session.rollback()
+        print(f"更新使用者時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '更新使用者時發生伺服器錯誤。'}), 500
+
+@app.route('/api/users/<int:user_id>/password', methods=['PUT'])
+@token_required
+@admin_required
+def reset_user_password(current_user, user_id):
+    """重設指定使用者的密碼（需管理者權限）"""
+    data = request.json
+    if not data or 'password' not in data:
+        return jsonify({'success': False, 'message': '請求資料無效，缺少新密碼'}), 400
+        
+    new_password = data['password']
+    if not new_password:
+        return jsonify({'success': False, 'message': '新密碼不能為空'}), 400
+        
+    try:
+        user = db.session.get(User, user_id)
+        if not user:
+            return jsonify({'success': False, 'message': '找不到指定的使用者'}), 404
+            
+        # 更新密碼
+        user.password_hash = generate_password_hash(new_password)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': '密碼重設成功'})
+    except Exception as e:
+        db.session.rollback()
+        print(f"重設密碼時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '重設密碼時發生伺服器錯誤。'}), 500
+
+@app.route('/api/users/<int:user_id>', methods=['DELETE'])
+@token_required
+@admin_required
+def delete_user(current_user, user_id):
+    """刪除使用者（需管理者權限）"""
+    try:
+        user = db.session.get(User, user_id)
+        if not user:
+            return jsonify({'success': False, 'message': '找不到指定的使用者'}), 404
+            
+        # 防止管理者刪除自己的帳號
+        if user.id == current_user.id:
+            return jsonify({'success': False, 'message': '無法刪除自己的帳號'}), 400
+            
+        db.session.delete(user)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': '使用者刪除成功'})
+    except Exception as e:
+        db.session.rollback()
+        print(f"刪除使用者時發生錯誤: {e}")
+        return jsonify({'success': False, 'message': '刪除使用者時發生伺服器錯誤。'}), 500
     
 # --- 公開 API ---
 @app.route('/api/media_with_settings', methods=['GET'])
 def get_media_with_settings():
     """提供給前端的 API，返回所有媒體資料和播放設定，並處理輪播群組的偏移"""
-    media_items_db = load_media_data()
-    settings = load_playback_settings()
-    materials = {item['id']: item for item in media_items_db if item.get('type') in ['image', 'video']}
-    groups = {item['id']: item for item in media_items_db if item.get('type') == 'carousel_group'}
-    assignments = [item for item in media_items_db if item.get('type') == 'section_assignment']
+    # 從資料庫獲取設定
+    settings_from_db = Setting.query.all()
+    settings = {s.key: s.value for s in settings_from_db}
+
+    # 從資料庫獲取所有指派
+    assignments = Assignment.query.all()
     
     section_content_map = {} 
-    group_assigned_sections = set()
 
     for assign in assignments:
-        if assign.get('content_source_type') == 'group_reference':
-            section_key = assign.get('section_key')
-            group_id = assign.get('group_id')
-            offset = assign.get('offset', 0)
-            group_def = groups.get(group_id)
-            if section_key and group_def:
-                group_assigned_sections.add(section_key) 
-                current_section_images = []
-                image_ids_in_group = group_def.get('image_ids', [])
-                if image_ids_in_group:
-                    effective_offset = offset % len(image_ids_in_group)
-                    ordered_image_ids = image_ids_in_group[effective_offset:] + image_ids_in_group[:effective_offset]
-                    for img_id in ordered_image_ids:
-                        material = materials.get(img_id)
-                        if material and material.get('type') == 'image': 
-                            current_section_images.append({"id": material.get("id"), "filename": material.get("filename"),"type": "image", "url": material.get("url"),"section_key": section_key})
-                section_content_map[section_key] = current_section_images
-    
-    for assign in assignments:
-        if assign.get('content_source_type') == 'single_media':
-            section_key = assign.get('section_key')
-            media_id = assign.get('media_id')
-            material = materials.get(media_id)
-            if section_key and material:
-                if section_key not in group_assigned_sections:
-                    if section_key not in section_content_map:
-                        section_content_map[section_key] = []
-                    section_content_map[section_key].append({"id": material.get("id"), "filename": material.get("filename"),"type": material.get("type"), "url": material.get("url"),"section_key": section_key})
+        section_key = assign.section_key
+        if section_key not in section_content_map:
+            section_content_map[section_key] = []
+
+        if assign.content_source_type == 'group_reference' and assign.carousel_group:
+            group = assign.carousel_group
+            # 透過 image_associations 取得已排序的圖片
+            ordered_images = [assoc.material for assoc in group.image_associations]
+            
+            if ordered_images:
+                effective_offset = assign.offset % len(ordered_images)
+                # 應用偏移量
+                final_image_order = ordered_images[effective_offset:] + ordered_images[:effective_offset]
+                
+                for material in final_image_order:
+                    section_content_map[section_key].append({
+                        "id": material.id,
+                        "filename": material.filename,
+                        "type": "image",
+                        "url": material.url,
+                        "section_key": section_key
+                    })
+
+        elif assign.content_source_type == 'single_media' and assign.material:
+            material = assign.material
+            section_content_map[section_key].append({
+                "id": material.id,
+                "filename": material.filename,
+                "type": material.type,
+                "url": material.url,
+                "section_key": section_key
+            })
 
     processed_media_for_frontend = []
     for section_key, content_list in section_content_map.items():
         processed_media_for_frontend.extend(content_list)
         
-    # Also include all raw materials and groups for admin page if needed elsewhere, or specific admin API
-    all_materials = [item for item in media_items_db if item.get('type') in ['image', 'video']]
-    all_groups = [item for item in media_items_db if item.get('type') == 'carousel_group']
+    # 為了讓後台 admin.html 仍然能讀取到所有素材和群組，暫時從資料庫查詢
+    all_materials = Material.query.all()
+    all_groups = CarouselGroup.query.all()
+    all_assignments = Assignment.query.all()
+
+    # 將 SQLAlchemy 物件轉換為字典列表
+    _debug_all_materials = [
+        {"id": m.id, "original_filename": m.original_filename, "filename": m.filename, "type": m.type, "url": m.url, "source": m.source} for m in all_materials
+    ]
+    _debug_all_groups = [
+        {"id": g.id, "name": g.name, "image_ids": [assoc.material_id for assoc in g.image_associations]} for g in all_groups
+    ]
+    _debug_all_assignments = [
+        {"id": a.id, "section_key": a.section_key, "content_source_type": a.content_source_type, "media_id": a.media_id, "group_id": a.group_id, "offset": a.offset} for a in all_assignments
+    ]
 
     return jsonify({"media": processed_media_for_frontend, 
                     "settings": settings, 
-                    "_debug_all_materials": all_materials, "_debug_all_groups": all_groups})
+                    "_debug_all_materials": _debug_all_materials, 
+                    "_debug_all_groups": _debug_all_groups,
+                    "_debug_all_assignments": _debug_all_assignments})
 
 # --- WebSocket ---
 @socketio.on('connect', namespace='/')
@@ -508,7 +1226,5 @@ def handle_disconnect():
 if __name__ == '__main__':
     with app.app_context():
         if not os.path.exists(UPLOAD_FOLDER): os.makedirs(UPLOAD_FOLDER, mode=0o755)
-        if not os.path.exists(MEDIA_FILE) or os.path.getsize(MEDIA_FILE) == 0: save_media_data([])
-        if not os.path.exists(SETTINGS_FILE) or os.path.getsize(SETTINGS_FILE) == 0: save_playback_settings({})
         db.create_all()
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True, use_reloader=True)
+    socketio.run(app, host='0.0.0.0', port=5003, debug=True, use_reloader=True)
