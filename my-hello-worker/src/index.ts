@@ -1,53 +1,62 @@
-import { Router } from 'itty-router';
-
-// Define the environment interface
-interface Env {
-  ASSETS: Fetcher;
+export interface Env {
+	ASSETS: {
+		fetch: (req: Request) => Promise<Response>;
+	};
 }
 
-// Create a router that ONLY handles API requests under the /api base path.
-const apiRouter = Router({ base: '/api' });
-
-apiRouter
-  .post('/login', () => {
-    const responseBody = JSON.stringify({ status: 'ok', message: 'Login successful' });
-    return new Response(responseBody, {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      },
-    });
-  })
-  // A catch-all 404 for any other request to /api/*
-  .all('*', () => new Response('API route not found', { status: 404 }));
-
-// Export the main worker fetch handler
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    const url = new URL(request.url);
+	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+		const url = new URL(request.url);
 
-    // If the path starts with /api/, delegate to the API router.
-    if (url.pathname.startsWith('/api/')) {
-      return apiRouter.handle(request, env, ctx).catch(err => {
-        console.error('API Router Error:', err);
-        return new Response('Internal Server Error in API', { status: 500 });
-      });
-    }
+		// Manually handle the /api/login route
+		if (url.pathname === '/api/login' && request.method === 'POST') {
+			try {
+				const data = await request.json<{ username?: string; password?: string }>();
 
-    // Handle the root path specifically, rewriting the request to /login.html
-    if (url.pathname === '/') {
-      const newUrl = new URL(request.url);
-      newUrl.pathname = '/login.html';
-      const newRequest = new Request(newUrl.toString(), request);
-      return env.ASSETS.fetch(newRequest);
-    }
+				if (data.username === 'admin' && data.password === 'admin') {
+					const successResponse = { status: 'ok' };
+					return new Response(JSON.stringify(successResponse), {
+						headers: { 'Content-Type': 'application/json' },
+						status: 200,
+					});
+				} else {
+					const errorResponse = { status: 'error', message: 'Invalid credentials' };
+					return new Response(JSON.stringify(errorResponse), {
+						headers: { 'Content-Type': 'application/json' },
+						status: 401,
+					});
+				}
+			} catch (err) {
+				const badRequestResponse = { status: 'error', message: 'Bad Request' };
+				return new Response(JSON.stringify(badRequestResponse), {
+					headers: { 'Content-Type': 'application/json' },
+					status: 400,
+				});
+			}
+		}
 
-    // For all other paths, attempt to fetch the asset directly.
-    // The ASSETS service itself will produce a 404 if the asset is not found.
-    // This is the crucial part that prevents the infinite loop.
-    return env.ASSETS.fetch(request);
-  },
+		// Handle other API routes with a 404
+		if (url.pathname.startsWith('/api/')) {
+			return new Response('API route not found', { status: 404 });
+		}
+
+		// Static asset serving
+		try {
+			if (url.pathname === '/') {
+				const loginUrl = new URL('/login.html', request.url);
+				return env.ASSETS.fetch(new Request(loginUrl.toString(), request));
+			}
+			return await env.ASSETS.fetch(request);
+		} catch (e) {
+			try {
+				const notFoundResponse = await env.ASSETS.fetch(new Request(new URL('/404.html', request.url), request));
+				return new Response(notFoundResponse.body, {
+					status: 404,
+					headers: notFoundResponse.headers
+				});
+			} catch (err) {
+				return new Response('Not found', { status: 404 });
+			}
+		}
+	},
 };
