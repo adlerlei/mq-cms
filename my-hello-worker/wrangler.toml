@@ -1,0 +1,18 @@
+name = "my-hello-worker"
+main = "src/index.ts"
+compatibility_date = "2024-07-07"
+compatibility_flags = ["nodejs_compat"]
+
+# 綁定 Durable Object
+# 這會讓你的 Worker 知道 MessageBroadcaster 這個 Durable Object 的存在
+[[durable_objects.bindings]]
+name = "MESSAGE_BROADCASTER"
+class_name = "MessageBroadcaster"
+
+[build]
+# 指定要上傳的資料夾 (前端靜態檔案)
+upload.format = "service-worker"
+
+# 讓你的 Worker 可以存取靜態檔案
+[site]
+bucket = "./public"

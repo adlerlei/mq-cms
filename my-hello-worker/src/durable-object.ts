@@ -12,7 +12,7 @@ export class MessageBroadcaster {
 	}
 
 	/**
-	 * 處理 HTTP 請求，主要用於 WebSocket 升級
+	 * 處理 HTTP 請求，包括 WebSocket 升級和 POST 請求
 	 */
 	async fetch(request: Request): Promise<Response> {
 		const url = new URL(request.url);
@@ -20,6 +20,11 @@ export class MessageBroadcaster {
 		// 處理 WebSocket 升級請求
 		if (request.headers.get('Upgrade') === 'websocket') {
 			return this.handleWebSocketUpgrade(request);
+		}
+
+		// 處理 POST 請求進行廣播
+		if (request.method === 'POST') {
+			return this.handleBroadcastRequest(request);
 		}
 
 		// 處理其他 HTTP 請求
@@ -195,6 +200,46 @@ export class MessageBroadcaster {
 		// 清理無效的連線
 		for (const connection of connectionsToRemove) {
 			this.connections.delete(connection);
+		}
+	}
+
+	/**
+	 * 處理廣播請求
+	 */
+	private async handleBroadcastRequest(request: Request): Promise<Response> {
+		try {
+			const body = await request.text();
+			
+			// 廣播訊息給所有已連線的 WebSocket 客戶端
+			this.broadcast({
+				type: 'broadcast',
+				data: body,
+				timestamp: new Date().toISOString(),
+				connectionCount: this.connections.size
+			});
+
+			return new Response(JSON.stringify({
+				success: true,
+				message: 'Message broadcasted successfully',
+				connectionCount: this.connections.size
+			}), {
+				headers: {
+					'Content-Type': 'application/json',
+					'Access-Control-Allow-Origin': '*'
+				}
+			});
+		} catch (error) {
+			console.error('Error handling broadcast request:', error);
+			return new Response(JSON.stringify({
+				success: false,
+				error: 'Failed to broadcast message'
+			}), {
+				status: 500,
+				headers: {
+					'Content-Type': 'application/json',
+					'Access-Control-Allow-Origin': '*'
+				}
+			});
 		}
 	}
 

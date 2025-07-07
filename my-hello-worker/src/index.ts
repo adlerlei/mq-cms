@@ -24,6 +24,15 @@ export default {
 			return durableObject.fetch(request);
 		}
 
+		// Handle POST /api/message for broadcasting
+		if (url.pathname === '/api/message' && request.method === 'POST') {
+			const id = env.MESSAGE_BROADCASTER.idFromName('global-chat');
+			const durableObject = env.MESSAGE_BROADCASTER.get(id);
+			
+			// Forward the request to the Durable Object
+			return durableObject.fetch(request);
+		}
+
 		// Handle WebSocket stats
 		if (url.pathname === '/api/ws-stats') {
 			const id = env.MESSAGE_BROADCASTER.idFromName('global-chat');
