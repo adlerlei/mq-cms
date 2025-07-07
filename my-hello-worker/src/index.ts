@@ -1,12 +1,37 @@
+import { MessageBroadcaster } from './durable-object';
+
 export interface Env {
 	ASSETS: {
 		fetch: (req: Request) => Promise<Response>;
 	};
+	MESSAGE_BROADCASTER: DurableObjectNamespace;
 }
+
+// Export Durable Object class
+export { MessageBroadcaster };
 
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
 		const url = new URL(request.url);
+
+		// Handle WebSocket connections
+		if (url.pathname === '/ws') {
+			// Get or create a Durable Object instance
+			const id = env.MESSAGE_BROADCASTER.idFromName('global-chat');
+			const durableObject = env.MESSAGE_BROADCASTER.get(id);
+			
+			// Forward the request to the Durable Object
+			return durableObject.fetch(request);
+		}
+
+		// Handle WebSocket stats
+		if (url.pathname === '/api/ws-stats') {
+			const id = env.MESSAGE_BROADCASTER.idFromName('global-chat');
+			const durableObject = env.MESSAGE_BROADCASTER.get(id);
+			
+			const statsUrl = new URL('/stats', request.url);
+			return durableObject.fetch(new Request(statsUrl.toString()));
+		}
 
 		// Manually handle the /api/login route
 		if (url.pathname === '/api/login' && request.method === 'POST') {

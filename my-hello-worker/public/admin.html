@@ -3,235 +3,350 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MQ 內容管理系統</title>
-    <link rel="stylesheet" href="css/bulma.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-    <link rel="stylesheet" href="css/admin.css">
+    <title>WebSocket 聊天室</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .chat-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .chat-header {
+            background: #007bff;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .chat-header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        
+        .connection-status {
+            margin-top: 10px;
+            font-size: 14px;
+        }
+        
+        .status-connected {
+            color: #28a745;
+        }
+        
+        .status-disconnected {
+            color: #dc3545;
+        }
+        
+        .status-connecting {
+            color: #ffc107;
+        }
+        
+        .messages-container {
+            height: 400px;
+            overflow-y: auto;
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .message {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 8px;
+            max-width: 80%;
+        }
+        
+        .message.system {
+            background-color: #e9ecef;
+            color: #6c757d;
+            font-style: italic;
+            max-width: 100%;
+            text-align: center;
+        }
+        
+        .message.welcome {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .message.user_joined {
+            background-color: #cce5ff;
+            color: #004085;
+            border: 1px solid #99d6ff;
+        }
+        
+        .message.user_left {
+            background-color: #ffe6cc;
+            color: #856404;
+            border: 1px solid #ffcc99;
+        }
+        
+        .message.message {
+            background-color: #f8f9fa;
+            color: #212529;
+            border: 1px solid #dee2e6;
+            margin-left: auto;
+        }
+        
+        .message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .message-time {
+            font-size: 12px;
+            color: #6c757d;
+            margin-bottom: 5px;
+        }
+        
+        .message-content {
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        
+        .input-container {
+            padding: 20px;
+            background: #f8f9fa;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .message-input {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        
+        .message-input:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+        }
+        
+        .send-button {
+            padding: 12px 24px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+        
+        .send-button:hover:not(:disabled) {
+            background: #0056b3;
+        }
+        
+        .send-button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .stats {
+            padding: 10px 20px;
+            background: #e9ecef;
+            font-size: 12px;
+            color: #6c757d;
+            text-align: center;
+        }
+    </style>
 </head>
 <body>
-    <!-- 認證檢查載入畫面 -->
-    <div id="authCheckingScreen" class="auth-checking">
-        <div class="has-text-centered">
-            <div class="loader"></div>
-            <p class="mt-4">正在驗證身份...</p>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h1>WebSocket 聊天室</h1>
+            <div class="connection-status">
+                <span id="connectionStatus" class="status-disconnected">未連線</span>
+            </div>
+        </div>
+        
+        <div class="stats">
+            <span id="statsInfo">載入中...</span>
+        </div>
+        
+        <div id="messagesContainer" class="messages-container">
+            <!-- 訊息將在這裡顯示 -->
+        </div>
+        
+        <div class="input-container">
+            <input 
+                type="text" 
+                id="messageInput" 
+                class="message-input" 
+                placeholder="輸入您的訊息..." 
+                disabled
+            >
+            <button id="sendButton" class="send-button" disabled>傳送</button>
         </div>
     </div>
 
-    <!-- 主要內容 -->
-    <div id="mainContent" class="main-content">
-        <nav class="navbar is-primary" role="navigation">
-            <div class="container">
-                <div class="navbar-brand"><a class="navbar-item has-text-weight-bold" href="#">MQ 內容管理系統</a></div>
-                <div class="navbar-menu"><div class="navbar-end"><div class="navbar-item"><div class="buttons">
-                    <button id="logoutButton" class="button is-primary is-light">登出</button>
-                </div></div></div></div>
-            </div>
-        </nav>
-    <section class="section">
-        <div class="container">
-            <div class="columns is-multiline">
-                <!-- 新增媒體 / 指派內容 -->
-                <div class="column is-half">
-                    <div class="box">
-                        <h2 class="title is-4">新增媒體 / 指派內容</h2>
-                        <form id="uploadForm" action="" method="POST" enctype="multipart/form-data">
-                            <div class="field"><label class="label">操作類型</label><div class="control"><div class="select is-fullwidth"><select name="type" id="mediaTypeSelect" required><option value="image">上傳圖片並指派</option><option value="video">上傳影片並指派</option><option value="group_reference">指派輪播組</option></select></div></div></div>
-                            <div id="sectionKeyField" class="field"><label class="label">指派到區塊</label><div class="control"><div class="select is-fullwidth"><select name="section_key" id="sectionKeySelect"></select></div></div></div>
-                            <div id="fileUploadField" class="field">
-                                <label class="label">選擇檔案</label>
-                                <div class="control">
-                                    <div class="file has-name is-fullwidth">
-                                        <label class="file-label">
-                                            <input class="file-input" type="file" name="file" id="fileInput" accept="image/*,video/*">
-                                            <span class="file-cta">
-                                                <span class="file-icon"><i class="fas fa-upload"></i></span>
-                                                <span class="file-label">選擇檔案...</span>
-                                            </span>
-                                            <span class="file-name" id="fileName">未選擇檔案</span>
-                                        </label>
-                                    </div>
-                                </div>
-                            </div>
-                            <div id="groupSelectField" class="field" style="display: none;">
-                                <label class="label">選擇輪播組</label>
-                                <div class="control">
-                                    <div class="select is-fullwidth">
-                                        <select name="group_id" id="groupSelect">
-                                            <option value="">請選擇輪播組</option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="field">
-                                <div class="control">
-                                    <button type="submit" class="button is-primary">
-                                        <span class="icon"><i class="fas fa-upload"></i></span>
-                                        <span>上傳並指派</span>
-                                    </button>
-                                </div>
-                            </div>
-                        </form>
-                        <div id="upload-progress-container">
-                            <progress id="upload-progress" class="progress is-primary" value="0" max="100">0%</progress>
-                            <p id="upload-status">準備上傳...</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 輪播組管理 -->
-                <div class="column is-half">
-                    <div class="box">
-                        <h2 class="title is-4">輪播組管理</h2>
-                        <form id="createGroupForm">
-                            <div class="field">
-                                <label class="label">輪播組名稱</label>
-                                <div class="control">
-                                    <input class="input" type="text" name="name" placeholder="輸入輪播組名稱" required>
-                                </div>
-                            </div>
-                            <div class="field">
-                                <div class="control">
-                                    <button type="submit" class="button is-info">
-                                        <span class="icon"><i class="fas fa-plus"></i></span>
-                                        <span>建立輪播組</span>
-                                    </button>
-                                </div>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-
-                <!-- 使用者管理 -->
-                <div class="column is-half">
-                    <div class="box">
-                        <h2 class="title is-4">使用者管理</h2>
-                        <form id="createUserForm">
-                            <div class="field">
-                                <label class="label">使用者名稱</label>
-                                <div class="control">
-                                    <input class="input" type="text" name="username" placeholder="輸入使用者名稱" required>
-                                </div>
-                            </div>
-                            <div class="field">
-                                <label class="label">密碼</label>
-                                <div class="control">
-                                    <input class="input" type="password" name="password" placeholder="輸入密碼" required>
-                                </div>
-                            </div>
-                            <div class="field">
-                                <label class="label">角色</label>
-                                <div class="control">
-                                    <div class="select is-fullwidth">
-                                        <select name="role" required>
-                                            <option value="">請選擇角色</option>
-                                            <option value="admin">管理員</option>
-                                            <option value="user">一般使用者</option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="field">
-                                <div class="control">
-                                    <button type="submit" class="button is-success">
-                                        <span class="icon"><i class="fas fa-user-plus"></i></span>
-                                        <span>新增使用者</span>
-                                    </button>
-                                </div>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-
-                <!-- 系統設定 -->
-                <div class="column is-half">
-                    <div class="box">
-                        <h2 class="title is-4">系統設定</h2>
-                        <form id="settingsForm">
-                            <div class="field">
-                                <label class="label">輪播間隔 (秒)</label>
-                                <div class="control">
-                                    <input class="input" type="number" name="carousel_interval" min="1" max="60" value="5">
-                                </div>
-                            </div>
-                            <div class="field">
-                                <div class="control">
-                                    <button type="submit" class="button is-warning">
-                                        <span class="icon"><i class="fas fa-save"></i></span>
-                                        <span>儲存設定</span>
-                                    </button>
-                                </div>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 媒體列表 -->
-            <div class="box">
-                <h2 class="title is-4">媒體列表</h2>
-                <div id="mediaListContainer">
-                    <!-- 媒體列表將由 JavaScript 動態生成 -->
-                </div>
-            </div>
-
-            <!-- 輪播組列表 -->
-            <div class="box">
-                <h2 class="title is-4">輪播組列表</h2>
-                <div id="groupListContainer">
-                    <!-- 輪播組列表將由 JavaScript 動態生成 -->
-                </div>
-            </div>
-
-            <!-- 使用者列表 -->
-            <div class="box">
-                <h2 class="title is-4">使用者列表</h2>
-                <div id="userListContainer">
-                    <!-- 使用者列表將由 JavaScript 動態生成 -->
-                </div>
-            </div>
-        </div>
-    </section>
-    </div>
-
-    <!-- 輪播組編輯模態框 -->
-    <div class="modal" id="groupEditModal">
-        <div class="modal-background"></div>
-        <div class="modal-card">
-            <header class="modal-card-head">
-                <p class="modal-card-title">編輯輪播組</p>
-                <button class="delete" aria-label="close" id="closeGroupEditModal"></button>
-            </header>
-            <section class="modal-card-body">
-                <div class="field">
-                    <label class="label">輪播組名稱</label>
-                    <div class="control">
-                        <input class="input" type="text" id="editGroupName" placeholder="輸入輪播組名稱">
-                    </div>
-                </div>
+    <script>
+        let ws = null;
+        let isConnected = false;
+        
+        // DOM 元素
+        const connectionStatus = document.getElementById('connectionStatus');
+        const messagesContainer = document.getElementById('messagesContainer');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+        const statsInfo = document.getElementById('statsInfo');
+        
+        // 更新連線狀態
+        function updateConnectionStatus(status, className) {
+            connectionStatus.textContent = status;
+            connectionStatus.className = `status-${className}`;
+            
+            // 更新輸入控制項狀態
+            const isConnectedState = className === 'connected';
+            messageInput.disabled = !isConnectedState;
+            sendButton.disabled = !isConnectedState;
+            isConnected = isConnectedState;
+        }
+        
+        // 添加訊息到聊天區域
+        function addMessage(data, type = 'message') {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            
+            const timeDiv = document.createElement('div');
+            timeDiv.className = 'message-time';
+            const timestamp = new Date(data.timestamp || Date.now()).toLocaleTimeString('zh-TW');
+            timeDiv.textContent = `${timestamp} [${data.type || type}]`;
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.textContent = data.content || data.message || JSON.stringify(data);
+            
+            messageDiv.appendChild(timeDiv);
+            messageDiv.appendChild(contentDiv);
+            
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            
+            // 更新統計資訊
+            if (data.connectionCount !== undefined) {
+                statsInfo.textContent = `目前線上人數: ${data.connectionCount}`;
+            }
+        }
+        
+        // 建立 WebSocket 連線
+        function connectWebSocket() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                return;
+            }
+            
+            updateConnectionStatus('連線中...', 'connecting');
+            
+            // 建立 WebSocket 連線
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws`;
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = function(event) {
+                updateConnectionStatus('已連線', 'connected');
+                addMessage({
+                    type: 'system',
+                    message: '成功連線到聊天室',
+                    timestamp: new Date().toISOString()
+                }, 'system');
+            };
+            
+            ws.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    addMessage(data, data.type || 'message');
+                } catch (e) {
+                    // 如果不是 JSON，當作純文字處理
+                    addMessage({
+                        type: 'text',
+                        content: event.data,
+                        timestamp: new Date().toISOString()
+                    }, 'message');
+                }
+            };
+            
+            ws.onclose = function(event) {
+                updateConnectionStatus('連線已斷開', 'disconnected');
+                addMessage({
+                    type: 'system',
+                    message: `連線已關閉 (代碼: ${event.code})`,
+                    timestamp: new Date().toISOString()
+                }, 'error');
                 
-                <div class="columns">
-                    <div class="column">
-                        <h4 class="title is-5">可用圖片</h4>
-                        <div class="available-images-list" id="availableImagesList">
-                            <!-- 可用圖片列表 -->
-                        </div>
-                    </div>
-                    <div class="column">
-                        <h4 class="title is-5">已選圖片</h4>
-                        <div class="selected-images-list" id="selectedImagesList">
-                            <!-- 已選圖片列表 -->
-                        </div>
-                    </div>
-                </div>
-            </section>
-            <footer class="modal-card-foot">
-                <button class="button is-success" id="saveGroupChanges">儲存變更</button>
-                <button class="button" id="cancelGroupEdit">取消</button>
-            </footer>
-        </div>
-    </div>
-
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-    <script type="module" src="js/admin.js"></script>
+                // 5秒後嘗試重新連線
+                setTimeout(connectWebSocket, 5000);
+            };
+            
+            ws.onerror = function(event) {
+                updateConnectionStatus('連線錯誤', 'disconnected');
+                addMessage({
+                    type: 'system',
+                    message: 'WebSocket 連線發生錯誤',
+                    timestamp: new Date().toISOString()
+                }, 'error');
+            };
+        }
+        
+        // 發送訊息
+        function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message || !isConnected || !ws || ws.readyState !== WebSocket.OPEN) {
+                return;
+            }
+            
+            const messageData = {
+                type: 'message',
+                content: message,
+                timestamp: new Date().toISOString()
+            };
+            
+            // 立即在自己的聊天區域顯示訊息
+            addMessage({
+                type: 'sent',
+                content: message,
+                timestamp: messageData.timestamp
+            }, 'message');
+            
+            // 透過 WebSocket 發送給其他客戶端
+            ws.send(JSON.stringify(messageData));
+            messageInput.value = '';
+        }
+        
+        // 事件監聽器
+        sendButton.addEventListener('click', sendMessage);
+        
+        messageInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+        
+        // 頁面載入時自動連線
+        window.addEventListener('load', function() {
+            // 延遲一點時間再連線，確保頁面完全載入
+            setTimeout(connectWebSocket, 500);
+        });
+        
+        // 頁面關閉時清理連線
+        window.addEventListener('beforeunload', function() {
+            if (ws) {
+                ws.close();
+            }
+        });
+    </script>
 </body>
 </html>
