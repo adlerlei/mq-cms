@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Media Display - MQAD</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+
+        .carousel-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .carousel-item {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            transition: opacity 1s ease-in-out;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .carousel-item.active {
+            opacity: 1;
+        }
+
+        .carousel-item img,
+        .carousel-item video {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .carousel-item video {
+            width: 100%;
+            height: 100%;
+        }
+
+        .loading-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            font-size: 2rem;
+            color: #fff;
+        }
+
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-size: 14px;
+            z-index: 1000;
+        }
+
+        .connection-status.connected {
+            background: rgba(0, 255, 0, 0.8);
+            color: #000;
+        }
+
+        .connection-status.disconnected {
+            background: rgba(255, 0, 0, 0.8);
+            color: #fff;
+        }
+
+        .playlist-info {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-size: 14px;
+            z-index: 1000;
+        }
+
+        /* 廣播訊息樣式 */
+        .broadcast-message {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 30px 50px;
+            border-radius: 15px;
+            font-size: 2rem;
+            text-align: center;
+            z-index: 2000;
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+
+        .broadcast-message.show {
+            opacity: 1;
+        }
+
+        .broadcast-message.is-primary {
+            background: rgba(0, 123, 255, 0.9);
+        }
+
+        .broadcast-message.is-success {
+            background: rgba(40, 167, 69, 0.9);
+        }
+
+        .broadcast-message.is-warning {
+            background: rgba(255, 193, 7, 0.9);
+            color: #000;
+        }
+
+        .broadcast-message.is-danger {
+            background: rgba(220, 53, 69, 0.9);
+        }
+    </style>
+</head>
+<body>
+    <div class="carousel-container" id="carouselContainer">
+        <div class="loading-message" id="loadingMessage">
+            載入媒體檔案中...
+        </div>
+    </div>
+
+    <div class="connection-status disconnected" id="connectionStatus">
+        WebSocket 連接中...
+    </div>
+
+    <div class="playlist-info" id="playlistInfo">
+        播放列表: 載入中...
+    </div>
+
+    <div class="broadcast-message" id="broadcastMessage"></div>
+
+    <script>
+        class MediaCarousel {
+            constructor() {
+                this.playlist = [];
+                this.currentIndex = 0;
+                this.carouselContainer = document.getElementById('carouselContainer');
+                this.loadingMessage = document.getElementById('loadingMessage');
+                this.playlistInfo = document.getElementById('playlistInfo');
+                this.connectionStatus = document.getElementById('connectionStatus');
+                this.broadcastMessage = document.getElementById('broadcastMessage');
+                this.websocket = null;
+                this.slideInterval = null;
+                this.R2_BASE_URL = 'https://pub-28f2148e4e2940c58f29c6f5147a004b.r2.dev';
+                
+                this.init();
+            }
+
+            async init() {
+                console.log('🚀 Initializing Media Carousel');
+                await this.loadPlaylist();
+                this.connectWebSocket();
+            }
+
+            async loadPlaylist() {
+                try {
+                    console.log('📋 Loading playlist from API...');
+                    const response = await fetch('/api/media');
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const files = await response.json();
+                    console.log('✅ Playlist loaded:', files);
+                    
+                    // 過濾出圖片和影片檔案
+                    this.playlist = files.filter(filename => {
+                        const ext = filename.toLowerCase().split('.').pop();
+                        return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'webm', 'mov', 'avi'].includes(ext);
+                    });
+
+                    this.updatePlaylistInfo();
+                    this.buildCarousel();
+                    
+                } catch (error) {
+                    console.error('❌ Error loading playlist:', error);
+                    this.showError('無法載入播放列表');
+                }
+            }
+
+            updatePlaylistInfo() {
+                const count = this.playlist.length;
+                this.playlistInfo.textContent = `播放列表: ${count} 個媒體檔案`;
+            }
+
+            buildCarousel() {
+                // 清空現有內容
+                this.carouselContainer.innerHTML = '';
+                
+                if (this.playlist.length === 0) {
+                    this.carouselContainer.innerHTML = '<div class="loading-message">沒有可播放的媒體檔案</div>';
+                    return;
+                }
+
+                console.log('🎠 Building carousel with', this.playlist.length, 'items');
+
+                // 為每個媒體檔案創建輪播項目
+                this.playlist.forEach((filename, index) => {
+                    const item = document.createElement('div');
+                    item.className = 'carousel-item';
+                    if (index === 0) item.classList.add('active');
+
+                    const mediaUrl = `${this.R2_BASE_URL}/${filename}`;
+                    const ext = filename.toLowerCase().split('.').pop();
+
+                    if (['mp4', 'webm', 'mov', 'avi'].includes(ext)) {
+                        // 影片
+                        const video = document.createElement('video');
+                        video.src = mediaUrl;
+                        video.autoplay = true;
+                        video.muted = true;
+                        video.loop = false;
+                        video.controls = false;
+                        
+                        video.addEventListener('ended', () => {
+                            this.nextSlide();
+                        });
+                        
+                        video.addEventListener('error', (e) => {
+                            console.error('❌ Video load error:', filename, e);
+                        });
+
+                        item.appendChild(video);
+                    } else {
+                        // 圖片
+                        const img = document.createElement('img');
+                        img.src = mediaUrl;
+                        img.alt = filename;
+                        
+                        img.addEventListener('error', (e) => {
+                            console.error('❌ Image load error:', filename, e);
+                        });
+
+                        item.appendChild(img);
+                    }
+
+                    this.carouselContainer.appendChild(item);
+                });
+
+                this.startSlideshow();
+            }
+
+            startSlideshow() {
+                // 清除現有的定時器
+                if (this.slideInterval) {
+                    clearInterval(this.slideInterval);
+                }
+
+                // 只有圖片需要自動輪播，影片會在播放結束時自動切換
+                this.slideInterval = setInterval(() => {
+                    const currentItem = this.carouselContainer.children[this.currentIndex];
+                    const isVideo = currentItem && currentItem.querySelector('video');
+                    
+                    // 如果當前是圖片，則自動切換到下一張
+                    if (!isVideo) {
+                        this.nextSlide();
+                    }
+                }, 5000); // 圖片顯示 5 秒
+            }
+
+            nextSlide() {
+                if (this.playlist.length === 0) return;
+
+                // 隱藏當前項目
+                const currentItem = this.carouselContainer.children[this.currentIndex];
+                if (currentItem) {
+                    currentItem.classList.remove('active');
+                    
+                    // 如果是影片，暫停播放
+                    const video = currentItem.querySelector('video');
+                    if (video) {
+                        video.pause();
+                        video.currentTime = 0;
+                    }
+                }
+
+                // 移動到下一個項目
+                this.currentIndex = (this.currentIndex + 1) % this.playlist.length;
+
+                // 顯示新項目
+                const nextItem = this.carouselContainer.children[this.currentIndex];
+                if (nextItem) {
+                    nextItem.classList.add('active');
+                    
+                    // 如果是影片，開始播放
+                    const video = nextItem.querySelector('video');
+                    if (video) {
+                        video.play().catch(e => {
+                            console.error('❌ Video play error:', e);
+                        });
+                    }
+                }
+
+                console.log(`🎬 Switched to slide ${this.currentIndex + 1}/${this.playlist.length}`);
+            }
+
+            connectWebSocket() {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}/ws`;
+                
+                console.log('🔌 Connecting to WebSocket:', wsUrl);
+                
+                this.websocket = new WebSocket(wsUrl);
+
+                this.websocket.onopen = () => {
+                    console.log('✅ WebSocket connected');
+                    this.connectionStatus.textContent = 'WebSocket 已連接';
+                    this.connectionStatus.className = 'connection-status connected';
+                };
+
+                this.websocket.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        console.log('📨 WebSocket message received:', data);
+                        
+                        if (data.type === 'playlist_updated') {
+                            console.log('🔄 Playlist updated, reloading...');
+                            this.loadPlaylist();
+                        } else if (data.content) {
+                            // 顯示廣播訊息
+                            this.showBroadcastMessage(data.content, data.style);
+                        }
+                    } catch (error) {
+                        console.error('❌ Error parsing WebSocket message:', error);
+                    }
+                };
+
+                this.websocket.onclose = () => {
+                    console.log('❌ WebSocket disconnected');
+                    this.connectionStatus.textContent = 'WebSocket 已斷線';
+                    this.connectionStatus.className = 'connection-status disconnected';
+                    
+                    // 5秒後重新連接
+                    setTimeout(() => {
+                        this.connectWebSocket();
+                    }, 5000);
+                };
+
+                this.websocket.onerror = (error) => {
+                    console.error('❌ WebSocket error:', error);
+                };
+            }
+
+            showBroadcastMessage(content, style = 'is-info') {
+                this.broadcastMessage.textContent = content;
+                this.broadcastMessage.className = `broadcast-message ${style} show`;
+                
+                // 5秒後隱藏訊息
+                setTimeout(() => {
+                    this.broadcastMessage.classList.remove('show');
+                }, 5000);
+            }
+
+            showError(message) {
+                this.carouselContainer.innerHTML = `<div class="loading-message">❌ ${message}</div>`;
+            }
+        }
+
+        // 頁面載入完成後初始化輪播器
+        document.addEventListener('DOMContentLoaded', () => {
+            new MediaCarousel();
+        });
+    </script>
+</body>
+</html>

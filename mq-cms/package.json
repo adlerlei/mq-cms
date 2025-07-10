@@ -1,5 +1,5 @@
 {
-	"name": "my-hello-worker",
+	"name": "mq-cms",
 	"version": "0.0.0",
 	"private": true,
 	"scripts": {

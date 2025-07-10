@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Admin Panel - WebSocket Broadcaster</title>
+		<link rel="stylesheet" href="css/bulma.css" />
+		<link rel="stylesheet" href="css/admin.css" />
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+	</head>
+	<body>
+		<section class="section">
+			<div class="container">
+				<h1 class="title">WebSocket Broadcast Control Panel</h1>
+				<p class="subtitle">Use this panel to send messages to all connected clients.</p>
+
+				<div class="columns is-centered">
+					<div class="column is-half">
+						<div class="box">
+							<h2 class="title is-4">Upload Media File</h2>
+							<form id="uploadForm">
+								<div class="field">
+									<div class="file has-name is-fullwidth">
+										<label class="file-label">
+											<input class="file-input" type="file" name="resume" id="fileInput">
+											<span class="file-cta">
+												<span class="file-icon">
+													<i class="fas fa-upload"></i>
+												</span>
+												<span class="file-label">
+													Choose a file...
+												</span>
+											</span>
+											<span class="file-name" id="fileName">
+												No file selected
+											</span>
+										</label>
+									</div>
+								</div>
+								<div class="field">
+									<div class="control">
+										<button type="submit" class="button is-link">Upload</button>
+									</div>
+								</div>
+							</form>
+						</div>
+						<div class="box">
+							<h2 class="title is-4">Media Files</h2>
+							<div id="media-list">
+								<p>Loading files...</p>
+							</div>
+						</div>
+						<div class="box">
+							<h2 class="title is-4">Broadcast Message</h2>
+							<form id="broadcastForm">
+								<div class="field">
+									<label class="label" for="messageInput">Message</label>
+									<div class="control">
+										<textarea id="messageInput" class="textarea" placeholder="Enter your message here..."></textarea>
+									</div>
+								</div>
+								<div class="field">
+									<label class="label" for="styleInput">Style</label>
+									<div class="control">
+										<input id="styleInput" class="input" type="text" placeholder="e.g., is-primary, is-large" />
+									</div>
+								</div>
+								<div class="field">
+									<div class="control">
+										<button type="submit" class="button is-primary">Broadcast Message</button>
+									</div>
+								</div>
+							</form>
+						</div>
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<script>
+			document.addEventListener('DOMContentLoaded', () => {
+				const broadcastForm = document.getElementById('broadcastForm');
+				const messageInput = document.getElementById('messageInput');
+				const styleInput = document.getElementById('styleInput');
+				const uploadForm = document.getElementById('uploadForm');
+				const fileInput = document.getElementById('fileInput');
+				const fileName = document.getElementById('fileName');
+				const mediaList = document.getElementById('media-list');
+
+				// 獲取檔案列表的函式
+				async function fetchMediaList() {
+					try {
+						const response = await fetch('/api/media');
+						if (response.ok) {
+							const files = await response.json();
+							displayMediaList(files);
+						} else {
+							mediaList.innerHTML = '<p class="has-text-danger">Failed to load files</p>';
+						}
+					} catch (error) {
+						console.error('Error fetching media list:', error);
+						mediaList.innerHTML = '<p class="has-text-danger">Error loading files</p>';
+					}
+				}
+
+				// 顯示檔案列表的函式
+				function displayMediaList(files) {
+					if (files.length === 0) {
+						mediaList.innerHTML = '<p class="has-text-grey">No files uploaded yet</p>';
+						return;
+					}
+
+					const listHTML = files.map(filename => `
+						<div class="box is-small" style="margin-bottom: 0.5rem; padding: 0.75rem;">
+							<div class="level is-mobile">
+								<div class="level-left">
+									<div class="level-item">
+										<span class="icon is-small">
+											<i class="fas fa-file"></i>
+										</span>
+										<span style="margin-left: 0.5rem;">${filename}</span>
+									</div>
+								</div>
+								<div class="level-right">
+									<div class="level-item">
+										<button class="button is-small is-danger" onclick="deleteFile('${filename}')">
+											<span class="icon is-small">
+												<i class="fas fa-trash"></i>
+											</span>
+											<span>Delete</span>
+										</button>
+									</div>
+								</div>
+							</div>
+						</div>
+					`).join('');
+
+					mediaList.innerHTML = listHTML;
+				}
+
+				// 刪除檔案的函式
+				window.deleteFile = async function(filename) {
+					if (confirm(`Are you sure you want to delete "${filename}"?`)) {
+						try {
+							const response = await fetch(`/api/media/${encodeURIComponent(filename)}`, {
+								method: 'DELETE',
+							});
+
+							if (response.ok) {
+								const result = await response.json();
+								console.log('Delete successful:', result);
+								alert(`File "${filename}" deleted successfully.`);
+								// 重新載入檔案列表
+								fetchMediaList();
+							} else {
+								const error = await response.json();
+								console.error('Delete failed:', error);
+								alert(`Delete failed: ${error.error || 'Unknown error'}`);
+							}
+						} catch (error) {
+							console.error('Error deleting file:', error);
+							alert('An error occurred while deleting the file.');
+						}
+					}
+				}
+
+				fileInput.addEventListener('change', () => {
+					if (fileInput.files.length > 0) {
+						fileName.textContent = fileInput.files[0].name;
+					} else {
+						fileName.textContent = 'No file selected';
+					}
+				});
+
+				uploadForm.addEventListener('submit', async (event) => {
+					event.preventDefault();
+					const file = fileInput.files[0];
+					if (!file) {
+						alert('Please select a file to upload.');
+						return;
+					}
+
+					const formData = new FormData();
+					formData.append('file', file);
+
+					try {
+						const response = await fetch('/api/media', {
+							method: 'POST',
+							body: formData,
+						});
+
+						if (response.ok) {
+							const result = await response.json();
+							console.log('Upload successful:', result);
+							alert(`File uploaded successfully. Key: ${result.key}`);
+							fileName.textContent = 'No file selected';
+							uploadForm.reset();
+							// 重新載入檔案列表
+							fetchMediaList();
+						} else {
+							const error = await response.json();
+							console.error('Upload failed:', error);
+							alert(`Upload failed: ${error.error || 'Unknown error'}`);
+						}
+					} catch (error) {
+						console.error('Error uploading file:', error);
+						alert('An error occurred while uploading the file.');
+					}
+				});
+
+				broadcastForm.addEventListener('submit', async (event) => {
+					event.preventDefault();
+
+					const message = messageInput.value;
+					const style = styleInput.value;
+
+					if (!message) {
+						alert('Please enter a message.');
+						return;
+					}
+
+					const payload = {
+						content: message,
+						style: style || 'is-info', // Default style if none provided
+					};
+
+					try {
+						const response = await fetch('/api/message', {
+							method: 'POST',
+							headers: {
+								'Content-Type': 'application/json',
+							},
+							body: JSON.stringify(payload),
+						});
+
+						if (response.ok) {
+							const result = await response.json();
+							console.log('Broadcast successful:', result);
+							alert(`Message broadcasted to ${result.connectionCount} client(s).`);
+							messageInput.value = '';
+							styleInput.value = '';
+						} else {
+							const error = await response.json();
+							console.error('Broadcast failed:', error);
+							alert(`Broadcast failed: ${error.error || 'Unknown error'}`);
+						}
+					} catch (error) {
+						console.error('Error sending broadcast:', error);
+						alert('An error occurred while sending the broadcast.');
+					}
+				});
+
+				// 頁面載入時獲取檔案列表
+				fetchMediaList();
+			});
+		</script>
+	</body>
+</html>
