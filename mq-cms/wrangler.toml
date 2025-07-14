@@ -1,0 +1,25 @@
+# wrangler.toml
+
+name = "mq-cms"
+main = "src/index.ts"
+compatibility_date = "2024-07-08"
+
+# 綁定 Durable Object
+[[durable_objects.bindings]]
+name = "MESSAGE_BROADCASTER"
+class_name = "MessageBroadcaster"
+
+# 綁定 R2 儲存桶
+[[r2_buckets]]
+binding = "MEDIA_BUCKET"
+bucket_name = "mq-cms-media"
+
+# 綁定靜態資源目錄
+[assets]
+directory = "./public"
+
+# 【修正這個區塊】
+# 這次我們使用一個新的 tag (v2) 來強制執行新的遷移
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["MessageBroadcaster"]
