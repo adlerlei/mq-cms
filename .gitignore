@@ -11,6 +11,7 @@ venv/
 .idea/
 .qodo
 .vscode/
+.claude/
 # 忽略 uploads 資料夾中的所有內容，但保留資料夾本身
 static/uploads/*
 !static/uploads/.gitkeep
