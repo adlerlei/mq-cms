@@ -1,258 +1,271 @@
-<!doctype html>
-<html lang="en">
-	<head>
-		<meta charset="UTF-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>Admin Panel - WebSocket Broadcaster</title>
-		<link rel="stylesheet" href="css/bulma.css" />
-		<link rel="stylesheet" href="css/admin.css" />
-		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
-	</head>
-	<body>
-		<section class="section">
-			<div class="container">
-				<h1 class="title">WebSocket Broadcast Control Panel</h1>
-				<p class="subtitle">Use this panel to send messages to all connected clients.</p>
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MQ 內容管理系統</title>
+    <link rel="stylesheet" href="css/bulma.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+    <!-- 認證檢查載入畫面 -->
+    <div id="authCheckingScreen" class="auth-checking">
+        <div class="has-text-centered">
+            <div class="loader"></div>
+            <p class="mt-4">正在驗證身份...</p>
+        </div>
+    </div>
 
-				<div class="columns is-centered">
-					<div class="column is-half">
-						<div class="box">
-							<h2 class="title is-4">Upload Media File</h2>
-							<form id="uploadForm">
-								<div class="field">
-									<div class="file has-name is-fullwidth">
-										<label class="file-label">
-											<input class="file-input" type="file" name="resume" id="fileInput">
-											<span class="file-cta">
-												<span class="file-icon">
-													<i class="fas fa-upload"></i>
-												</span>
-												<span class="file-label">
-													Choose a file...
-												</span>
-											</span>
-											<span class="file-name" id="fileName">
-												No file selected
-											</span>
-										</label>
-									</div>
-								</div>
-								<div class="field">
-									<div class="control">
-										<button type="submit" class="button is-link">Upload</button>
-									</div>
-								</div>
-							</form>
-						</div>
-						<div class="box">
-							<h2 class="title is-4">Media Files</h2>
-							<div id="media-list">
-								<p>Loading files...</p>
-							</div>
-						</div>
-						<div class="box">
-							<h2 class="title is-4">Broadcast Message</h2>
-							<form id="broadcastForm">
-								<div class="field">
-									<label class="label" for="messageInput">Message</label>
-									<div class="control">
-										<textarea id="messageInput" class="textarea" placeholder="Enter your message here..."></textarea>
-									</div>
-								</div>
-								<div class="field">
-									<label class="label" for="styleInput">Style</label>
-									<div class="control">
-										<input id="styleInput" class="input" type="text" placeholder="e.g., is-primary, is-large" />
-									</div>
-								</div>
-								<div class="field">
-									<div class="control">
-										<button type="submit" class="button is-primary">Broadcast Message</button>
-									</div>
-								</div>
-							</form>
-						</div>
-					</div>
-				</div>
-			</div>
-		</section>
+    <!-- 主要內容 -->
+    <div id="mainContent" class="main-content">
+        <nav class="navbar is-primary" role="navigation">
+            <div class="container">
+                <div class="navbar-brand"><a class="navbar-item has-text-weight-bold" href="#">MQ 內容管理系統</a></div>
+                <div class="navbar-menu"><div class="navbar-end"><div class="navbar-item"><div class="buttons">
+                    <button id="logoutButton" class="button is-primary is-light">登出</button>
+                </div></div></div></div>
+            </div>
+        </nav>
+    <section class="section">
+        <div class="container">
+            <div class="columns is-multiline">
+                <!-- 新增媒體 / 指派內容 -->
+                <div class="column is-half">
+                    <div class="box">
+                        <h2 class="title is-4">新增媒體 / 指派內容</h2>
+                        <form id="uploadForm" action="" method="POST" enctype="multipart/form-data">
+                            <div class="field"><label class="label">操作類型</label><div class="control"><div class="select is-fullwidth"><select name="type" id="mediaTypeSelect" required><option value="image">上傳圖片並指派</option><option value="video">上傳影片並指派</option><option value="group_reference">指派輪播組</option></select></div></div></div>
+                            <div id="sectionKeyField" class="field"><label class="label">指派到區塊</label><div class="control"><div class="select is-fullwidth"><select name="section_key" id="sectionKeySelect"></select></div></div></div>
+                            <div id="fileUploadField" class="field">
+                                <label class="label">選擇檔案</label>
+                                <div class="control">
+                                    <div class="file has-name is-fullwidth">
+                                        <label class="file-label">
+                                            <input class="file-input" type="file" name="file" 
+                                                   accept=".jpg,.jpeg,.png,.gif,.mp4,.mov,.avi">
+                                            <span class="file-cta">
+                                                <i class="fas fa-upload"></i>
+                                                <span>選擇檔案…</span>
+                                            </span>
+                                            <span class="file-name">未選擇任何檔案</span>
+                                        </label>
+                                    </div>
+                                    <p class="help is-info">請確保檔案包含正確的副檔名（例如：.jpg、.png、.gif 等）</p>
+                                    <p class="help">支援的圖片格式：.jpg, .jpeg, .png, .gif</p>
+                                    <p class="help">支援的影片格式：.mp4, .mov, .avi</p>
+                                </div>
+                            </div>
+                            <div id="carouselGroupField" class="field" style="display: none;"><label class="label">選擇輪播組</label><div class="control"><div class="select is-fullwidth"><select name="carousel_group_id" id="carouselGroupSelect"></select></div></div></div>
+                            <div id="carouselOffsetField" class="field" style="display: none;">
+                                <label class="label">偏移量</label>
+                                <div class="control"><input class="input" type="number" name="offset" value="0" min="0"></div>
+                                <p class="help">例如：0 表示從第一張開始，1 表示從第二張開始，以此類推。</p>
+                            </div>
+                            <div id="upload-progress-container" class="field">
+                                <label class="label">上傳進度</label>
+                                <progress id="upload-progress-bar" class="progress is-primary" value="0" max="100">0%</progress>
+                                <span id="upload-progress-text">0%</span>
+                            </div>
+                            <div class="field is-grouped is-grouped-right"><button type="submit" class="button is-primary">執行操作</button></div>
+                        </form>
+                    </div>
+                </div>
 
-		<script>
-			document.addEventListener('DOMContentLoaded', () => {
-				const broadcastForm = document.getElementById('broadcastForm');
-				const messageInput = document.getElementById('messageInput');
-				const styleInput = document.getElementById('styleInput');
-				const uploadForm = document.getElementById('uploadForm');
-				const fileInput = document.getElementById('fileInput');
-				const fileName = document.getElementById('fileName');
-				const mediaList = document.getElementById('media-list');
+                <!-- 全局播放設定 -->
+                <div class="column is-half">
+                    <div class="box">
+                        <h2 class="title is-4">全局播放設定</h2>
+                        <div id="settings-notification" class="notification is-hidden"></div>
+                        <form id="globalSettingsForm">
+                            <div class="field">
+                                <label class="label" for="header_interval">頁首內容輪播間隔時間 (秒)</label>
+                                <div class="control"><input class="input" type="number" id="header_interval" value="5"></div>
+                                <p class="help">適用於頁首區域有多個圖片/影片時的輪播間隔。</p>
+                            </div>
+                            <div class="field">
+                                <label class="label" for="carousel_interval">中間區塊圖片輪播間隔時間 (秒)</label>
+                                <div class="control"><input class="input" type="number" id="carousel_interval" value="6"></div>
+                                <p class="help">適用於所有四個中間輪播區塊。</p>
+                            </div>
+                            <div class="field">
+                                <label class="label" for="footer_interval">頁尾內容輪播間隔時間 (秒)</label>
+                                <div class="control"><input class="input" type="number" id="footer_interval" value="7"></div>
+                                <p class="help">適用於頁尾區域有多個圖片/影片時的輪播間隔。</p>
+                            </div>
+                            <div class="field is-grouped is-grouped-right"><button type="submit" class="button is-info" id="saveSettingsButton">儲存設定</button></div>
+                        </form>
+                    </div>
+                </div>
 
-				// 獲取檔案列表的函式
-				async function fetchMediaList() {
-					try {
-						const response = await fetch('/api/media');
-						if (response.ok) {
-							const files = await response.json();
-							displayMediaList(files);
-						} else {
-							mediaList.innerHTML = '<p class="has-text-danger">Failed to load files</p>';
-						}
-					} catch (error) {
-						console.error('Error fetching media list:', error);
-						mediaList.innerHTML = '<p class="has-text-danger">Error loading files</p>';
-					}
-				}
+                <!-- 媒體庫與區塊內容指派 -->
+                <div class="column is-half">
+                    <div class="box">
+                        <h2 class="title is-4">媒體庫與區塊內容指派</h2>
+                        <div class="table-container">
+                            <table class="table is-fullwidth is-striped is-hoverable media-list-table">
+                                <thead><tr><th>預覽/資訊</th><th>類型</th><th>狀態/指派到區塊</th><th class="has-text-right">操作</th></tr></thead>
+                                <tbody id="mediaTableBody">
+                                    <tr><td colspan="4" class="has-text-centered">載入中...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
 
-				// 顯示檔案列表的函式
-				function displayMediaList(files) {
-					if (files.length === 0) {
-						mediaList.innerHTML = '<p class="has-text-grey">No files uploaded yet</p>';
-						return;
-					}
+                <!-- 管理輪播圖片組 -->
+                <div class="column is-half">
+                    <div class="box">
+                        <h2 class="title is-4">管理輪播圖片組</h2>
+                        <div class="box"><h3 class="title is-5">建立新群組</h3>
+                            <form id="createGroupForm" action="" method="POST">
+                                <div class="field"><label class="label">群組名稱</label><div class="control"><input class="input" type="text" name="group_name" required placeholder="例如：春季新品輪播"></div></div>
+                                <div class="field is-grouped is-grouped-right"><button type="submit" class="button is-success" id="createGroupButton">建立群組</button></div>
+                            </form>
+                        </div>
+                        <div class="box mt-4"><h3 class="title is-5">現有群組</h3>
+                            <div class="table-container"><table class="table is-fullwidth is-striped" id="groupsTable">
+                                <thead><tr><th>群組名稱</th><th>圖片數</th><th class="has-text-right">操作</th></tr></thead>
+                                <tbody id="groupsTableBody">
+                                    <tr><td colspan="3" class="has-text-centered">載入中...</td></tr>
+                                </tbody>
+                            </table></div>
+                        </div>
+                    </div>
+                </div>
 
-					const listHTML = files.map(filename => `
-						<div class="box is-small" style="margin-bottom: 0.5rem; padding: 0.75rem;">
-							<div class="level is-mobile">
-								<div class="level-left">
-									<div class="level-item">
-										<span class="icon is-small">
-											<i class="fas fa-file"></i>
-										</span>
-										<span style="margin-left: 0.5rem;">${filename}</span>
-									</div>
-								</div>
-								<div class="level-right">
-									<div class="level-item">
-										<button class="button is-small is-danger" onclick="deleteFile('${filename}')">
-											<span class="icon is-small">
-												<i class="fas fa-trash"></i>
-											</span>
-											<span>Delete</span>
-										</button>
-									</div>
-								</div>
-							</div>
-						</div>
-					`).join('');
+                <!-- 廣播訊息 -->
+                <div class="column is-half">
+                    <div class="box">
+                        <h2 class="title is-4">廣播訊息</h2>
+                        <form id="broadcastForm">
+                            <div class="field">
+                                <label class="label" for="messageInput">訊息內容</label>
+                                <div class="control">
+                                    <textarea id="messageInput" class="textarea" placeholder="輸入要廣播的訊息..."></textarea>
+                                </div>
+                            </div>
+                            <div class="field">
+                                <label class="label" for="styleInput">樣式</label>
+                                <div class="control">
+                                    <div class="select is-fullwidth">
+                                        <select id="styleInput">
+                                            <option value="is-info">一般訊息</option>
+                                            <option value="is-primary">重要訊息</option>
+                                            <option value="is-success">成功訊息</option>
+                                            <option value="is-warning">警告訊息</option>
+                                            <option value="is-danger">危險訊息</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="field">
+                                <div class="control">
+                                    <button type="submit" class="button is-primary">發送廣播訊息</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
 
-					mediaList.innerHTML = listHTML;
-				}
+    <!-- 編輯輪播圖片組的Modal -->
+    <div id="editCarouselGroupModal" class="modal">
+        <div class="modal-background"></div>
+        <div class="modal-card">
+            <header class="modal-card-head">
+                <p class="modal-card-title">編輯輪播圖片組: <span id="modalGroupName"></span></p>
+                <button class="delete" aria-label="close"></button>
+            </header>
+            <section class="modal-card-body">
+                <input type="hidden" id="modalGroupId">
+                
+                <div class="box mb-4" style="background-color: #f0f8ff; border: 2px dashed #3273dc;">
+                    <h5 class="title is-6 has-text-primary">
+                        <i class="fas fa-upload"></i> 上傳圖片到此群組
+                    </h5>
+                    <div class="field">
+                        <div class="control">
+                            <div class="file has-name is-fullwidth">
+                                <label class="file-label">
+                                    <input class="file-input" type="file" id="groupImageUpload" 
+                                           accept=".jpg,.jpeg,.png,.gif" multiple>
+                                    <span class="file-cta">
+                                        <i class="fas fa-upload"></i>
+                                        <span>選擇多張圖片...</span>
+                                    </span>
+                                    <span class="file-name" id="groupUploadFileName">未選擇任何檔案</span>
+                                </label>
+                            </div>
+                        </div>
+                        <p class="help is-info">支援格式：JPG, PNG, GIF | 可一次選擇多張圖片</p>
+                    </div>
+                    <div class="field">
+                        <button id="uploadToGroupButton" class="button is-primary" disabled>
+                            <i class="fas fa-upload"></i>
+                            <span>上傳到此群組</span>
+                        </button>
+                    </div>
+                    <div id="groupUploadProgress" class="progress-container" style="display: none;">
+                        <progress class="progress is-primary" value="0" max="100">0%</progress>
+                        <p class="has-text-centered mt-2">上傳中...</p>
+                    </div>
+                </div>
+                
+                <div class="notification is-info is-light mb-4">
+                    <p><strong>素材使用說明：</strong></p>
+                    <ul class="mt-2">
+                        <li>• 可直接上傳圖片到此群組，上傳後立即可用</li>
+                        <li>• 所有已上傳的圖片素材都可以加入輪播群組</li>
+                        <li>• <span class="tag is-warning is-small">已指派</span> 表示素材已單獨指派到其他區塊</li>
+                        <li>• <span class="tag is-info is-small">在其他群組</span> 表示素材已在其他輪播群組中使用</li>
+                        <li>• <span class="tag is-success is-small">群組：XXX</span> 表示群組專屬圖片</li>
+                    </ul>
+                </div>
+                
+                <div class="columns">
+                <div class="column"><h4 class="title is-5">已選圖片 (可拖曳排序)</h4><div id="selectedImagesList" class="selected-images-list"><p class="has-text-grey-light has-text-centered p-4">此群組尚無圖片</p></div></div>
+                <div class="column"><h4 class="title is-5">所有可用圖片</h4><div id="availableImagesList" class="available-images-list"></div></div>
+            </div></section>
+            <footer class="modal-card-foot"><button id="saveGroupChangesButton" class="button is-success">儲存變更</button><button class="button" id="cancelGroupChangesButton">取消</button></footer>
+        </div>
+    </div>
 
-				// 刪除檔案的函式
-				window.deleteFile = async function(filename) {
-					if (confirm(`Are you sure you want to delete "${filename}"?`)) {
-						try {
-							const response = await fetch(`/api/media/${encodeURIComponent(filename)}`, {
-								method: 'DELETE',
-							});
+    <!-- 重新指派素材 Modal -->
+    <div id="reassignMediaModal" class="modal">
+        <div class="modal-background"></div>
+        <div class="modal-card">
+            <header class="modal-card-head">
+                <p class="modal-card-title">重新指派素材: <span id="reassignMediaFilename"></span></p>
+                <button class="delete" aria-label="close"></button>
+            </header>
+            <section class="modal-card-body">
+                <form id="reassignMediaForm">
+                    <input type="hidden" id="reassignMediaId">
+                    <input type="hidden" id="reassignMediaType">
 
-							if (response.ok) {
-								const result = await response.json();
-								console.log('Delete successful:', result);
-								alert(`File "${filename}" deleted successfully.`);
-								// 重新載入檔案列表
-								fetchMediaList();
-							} else {
-								const error = await response.json();
-								console.error('Delete failed:', error);
-								alert(`Delete failed: ${error.error || 'Unknown error'}`);
-							}
-						} catch (error) {
-							console.error('Error deleting file:', error);
-							alert('An error occurred while deleting the file.');
-						}
-					}
-				}
+                    <div class="field">
+                        <label class="label">選擇指派區塊</label>
+                        <div class="control">
+                            <div class="select is-fullwidth">
+                                <select id="reassignSectionSelect" required>
+                                    <option value="" disabled selected>-- 請選擇區塊 --</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </section>
+            <footer class="modal-card-foot">
+                <button id="confirmReassignButton" class="button is-success">確認指派</button>
+                <button class="button" id="cancelReassignButton">取消</button>
+            </footer>
+        </div>
+    </div>
 
-				fileInput.addEventListener('change', () => {
-					if (fileInput.files.length > 0) {
-						fileName.textContent = fileInput.files[0].name;
-					} else {
-						fileName.textContent = 'No file selected';
-					}
-				});
-
-				uploadForm.addEventListener('submit', async (event) => {
-					event.preventDefault();
-					const file = fileInput.files[0];
-					if (!file) {
-						alert('Please select a file to upload.');
-						return;
-					}
-
-					const formData = new FormData();
-					formData.append('file', file);
-
-					try {
-						const response = await fetch('/api/media', {
-							method: 'POST',
-							body: formData,
-						});
-
-						if (response.ok) {
-							const result = await response.json();
-							console.log('Upload successful:', result);
-							alert(`File uploaded successfully. Key: ${result.key}`);
-							fileName.textContent = 'No file selected';
-							uploadForm.reset();
-							// 重新載入檔案列表
-							fetchMediaList();
-						} else {
-							const error = await response.json();
-							console.error('Upload failed:', error);
-							alert(`Upload failed: ${error.error || 'Unknown error'}`);
-						}
-					} catch (error) {
-						console.error('Error uploading file:', error);
-						alert('An error occurred while uploading the file.');
-					}
-				});
-
-				broadcastForm.addEventListener('submit', async (event) => {
-					event.preventDefault();
-
-					const message = messageInput.value;
-					const style = styleInput.value;
-
-					if (!message) {
-						alert('Please enter a message.');
-						return;
-					}
-
-					const payload = {
-						content: message,
-						style: style || 'is-info', // Default style if none provided
-					};
-
-					try {
-						const response = await fetch('/api/message', {
-							method: 'POST',
-							headers: {
-								'Content-Type': 'application/json',
-							},
-							body: JSON.stringify(payload),
-						});
-
-						if (response.ok) {
-							const result = await response.json();
-							console.log('Broadcast successful:', result);
-							alert(`Message broadcasted to ${result.connectionCount} client(s).`);
-							messageInput.value = '';
-							styleInput.value = '';
-						} else {
-							const error = await response.json();
-							console.error('Broadcast failed:', error);
-							alert(`Broadcast failed: ${error.error || 'Unknown error'}`);
-						}
-					} catch (error) {
-						console.error('Error sending broadcast:', error);
-						alert('An error occurred while sending the broadcast.');
-					}
-				});
-
-				// 頁面載入時獲取檔案列表
-				fetchMediaList();
-			});
-		</script>
-	</body>
+    <script type="module" src="js/admin.js"></script>
+    </div> <!-- 關閉 mainContent div -->
+</body>
 </html>

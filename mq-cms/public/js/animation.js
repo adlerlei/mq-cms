@@ -85,9 +85,9 @@ function initializeGenericCarousel(containerElement, slideInterval) {
 
 // 更新所有區塊
 function updateAllSections(data) {
-  const mediaItems = data.media || []; // 確保 mediaItems 始終是陣列
-  const settings = data.settings || {};
-
+  const { assignments, materials, groups, settings, available_sections } = data;
+  
+  // 設定輪播間隔
   const currentIntervals = {
     header_interval: settings.header_interval !== undefined ? parseInt(settings.header_interval, 10) * 1000 : DEFAULT_INTERVALS.header_interval,
     carousel_interval: settings.carousel_interval !== undefined ? parseInt(settings.carousel_interval, 10) * 1000 : DEFAULT_INTERVALS.carousel_interval,
@@ -95,234 +95,268 @@ function updateAllSections(data) {
   };
   console.log("當前使用的輪播間隔 (毫秒):", currentIntervals);
 
-
-  updateHeaderContent(mediaItems, currentIntervals.header_interval);
-  updateFooterContent(mediaItems, currentIntervals.footer_interval);
-  updateCarousel(mediaItems, 'carousel_top_left', 'carousel-top-left-inner', currentIntervals.carousel_interval);
-  updateCarousel(mediaItems, 'carousel_top_right', 'carousel-top-right-inner', currentIntervals.carousel_interval);
-  updateCarousel(mediaItems, 'carousel_bottom_left', 'carousel-bottom-left-inner', currentIntervals.carousel_interval);
-  updateCarousel(mediaItems, 'carousel_bottom_right', 'carousel-bottom-right-inner', currentIntervals.carousel_interval);
+  // 更新所有區塊
+  updateSection('header_video', data, 'header-content-container', currentIntervals.header_interval);
+  updateSection('carousel_top_left', data, 'carousel-top-left-inner', currentIntervals.carousel_interval);
+  updateSection('carousel_top_right', data, 'carousel-top-right-inner', currentIntervals.carousel_interval);
+  updateSection('carousel_bottom_left', data, 'carousel-bottom-left-inner', currentIntervals.carousel_interval);
+  updateSection('carousel_bottom_right', data, 'carousel-bottom-right-inner', currentIntervals.carousel_interval);
+  updateSection('footer_content', data, 'footer-content-container', currentIntervals.footer_interval);
 }
 
 // 獲取媒體數據和設定
 async function fetchMediaData() {
   try {
+    // 獲取完整的媒體資料包含指派、素材、群組和設定
     const response = await fetch(`${SERVER_BASE_URL}/api/media_with_settings`);
     if (!response.ok) {
-      throw new Error(`獲取媒體資料和設定失敗: ${response.status} ${response.statusText}`);
+      throw new Error(`獲取媒體資料失敗: ${response.status} ${response.statusText}`);
     }
     const data = await response.json();
-    console.log('成功獲取媒體資料和設定:', data);
+    console.log('成功獲取完整媒體資料:', data);
+    
     return data;
   } catch (error) {
     console.error('fetchMediaData 錯誤:', error);
-    return { media: [], settings: DEFAULT_INTERVALS }; // 返回包含預設值的物件
+    return {
+      assignments: [],
+      materials: [],
+      groups: [],
+      settings: DEFAULT_INTERVALS,
+      available_sections: {}
+    };
   }
 }
 
-// 通用函數：填充並初始化指定區塊的內容
-function populateSectionContent(containerId, sectionKey, mediaItems, slideInterval) {
+function getFileType(filename) {
+  const ext = filename.toLowerCase().split('.').pop();
+  const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+  const videoExts = ['mp4', 'webm', 'mov', 'avi'];
+  
+  if (imageExts.includes(ext)) return 'image';
+  if (videoExts.includes(ext)) return 'video';
+  return 'unknown';
+}
+
+// 核心渲染函式：更新指定區塊
+function updateSection(sectionKey, data, containerId, slideInterval) {
   try {
-    const container = document.getElementById(containerId);
+    const { assignments, materials, groups } = data;
+    
+    // 根據 containerId 找到容器元素
+    let container;
+    if (containerId === 'carousel-top-left-inner' || containerId === 'carousel-top-right-inner' || 
+        containerId === 'carousel-bottom-left-inner' || containerId === 'carousel-bottom-right-inner') {
+      // 對於中間輪播，containerId 是 inner 元素的 id
+      container = document.getElementById(containerId);
+    } else {
+      // 對於頁首和頁尾，containerId 是外層容器的 id
+      container = document.getElementById(containerId);
+    }
+    
     if (!container) {
       console.warn(`找不到容器元素: ${containerId}`);
       return;
     }
-    container.innerHTML = ''; // 清空容器
-    if (container.slideTimer) {
-      clearInterval(container.slideTimer);
-      container.slideTimer = null;
+    
+    // 清空容器並停止舊的計時器
+    if (containerId === 'carousel-top-left-inner' || containerId === 'carousel-top-right-inner' || 
+        containerId === 'carousel-bottom-left-inner' || containerId === 'carousel-bottom-right-inner') {
+      // 對於中間輪播，需要找到父層容器來停止計時器
+      const parentContainer = container.closest('.carousel-container');
+      if (parentContainer && parentContainer.slideTimer) {
+        clearInterval(parentContainer.slideTimer);
+        parentContainer.slideTimer = null;
+      }
+      container.innerHTML = '';
+    } else {
+      // 對於頁首和頁尾
+      container.innerHTML = '';
+      if (container.slideTimer) {
+        clearInterval(container.slideTimer);
+        container.slideTimer = null;
+      }
     }
-
-    const sectionContent = mediaItems.filter(item => item.section_key === sectionKey);
-
-    if (sectionContent.length > 0) {
-      // 為頁首和頁尾創建 wrapperDiv 和 innerCarousel
-      // 中間輪播區塊的 innerCarousel 已經在 HTML 中
-      let targetInnerCarousel;
-      let wrapperToInitialize; // 用於 initializeGenericCarousel 的目標元素
-
-      if (sectionKey === 'header_video' || sectionKey === 'footer_content') {
-        const wrapperDiv = document.createElement('div');
-        wrapperDiv.classList.add('carousel-container'); // 確保有這個 class
-        wrapperDiv.style.width = '100%';
-        wrapperDiv.style.height = '100%'; // 讓 wrapperDiv 填滿父容器（例如固定高度的 footerContainer）
-        wrapperDiv.style.position = 'relative'; // 確保 wrapper 是定位基準
-
-        targetInnerCarousel = document.createElement('div');
-        targetInnerCarousel.classList.add('carousel-inner');
-        wrapperDiv.appendChild(targetInnerCarousel);
-        container.appendChild(wrapperDiv);
-        wrapperToInitialize = wrapperDiv;
-      } else {
-        // 對於中間輪播區塊，直接使用 HTML 中的 inner 元素
-        targetInnerCarousel = container.querySelector('.carousel-inner');
-        if (!targetInnerCarousel) {
-             console.warn(`在 ${containerId} 中找不到 .carousel-inner 給 ${sectionKey}`);
-             return;
+    
+    // 篩選出對應這個區塊的指派
+    const sectionAssignments = assignments.filter(assignment => assignment.section_key === sectionKey);
+    
+    if (sectionAssignments.length === 0) {
+      console.log(`沒有找到區塊 ${sectionKey} 的指派資料。`);
+      return;
+    }
+    
+    // 準備內容陣列
+    const contentItems = [];
+    
+    // 根據指派類型處理內容
+    sectionAssignments.forEach(assignment => {
+      if (assignment.content_type === 'single_media') {
+        // 單一媒體
+        const material = materials.find(m => m.id === assignment.content_id);
+        if (material) {
+          contentItems.push({
+            type: material.type,
+            url: material.url,
+            filename: material.filename
+          });
         }
-        wrapperToInitialize = container; // 中間輪播的容器是 .carousel-container
+      } else if (assignment.content_type === 'group_reference') {
+        // 群組引用
+        const group = groups.find(g => g.id === assignment.content_id);
+        if (group && group.materials) {
+          // 將群組中的所有媒體加入內容陣列
+          group.materials.forEach(material => {
+            contentItems.push({
+              type: material.type,
+              url: material.url,
+              filename: material.filename
+            });
+          });
+        }
+      }
+    });
+    
+    if (contentItems.length === 0) {
+      console.log(`區塊 ${sectionKey} 沒有有效的內容。`);
+      return;
+    }
+    
+    // 創建內容結構
+    let targetInnerCarousel;
+    let wrapperToInitialize;
+    
+    if (sectionKey === 'header_video' || sectionKey === 'footer_content') {
+      // 頁首和頁尾：創建輪播結構
+      const wrapperDiv = document.createElement('div');
+      wrapperDiv.classList.add('carousel-container');
+      wrapperDiv.style.width = '100%';
+      wrapperDiv.style.height = '100%';
+      wrapperDiv.style.position = 'relative';
+      
+      targetInnerCarousel = document.createElement('div');
+      targetInnerCarousel.classList.add('carousel-inner');
+      wrapperDiv.appendChild(targetInnerCarousel);
+      container.appendChild(wrapperDiv);
+      wrapperToInitialize = wrapperDiv;
+    } else {
+      // 中間輪播：使用現有的結構
+      targetInnerCarousel = container;
+      const parentContainer = container.closest('.carousel-container');
+      wrapperToInitialize = parentContainer;
+    }
+    
+    // 生成媒體元素
+    contentItems.forEach(item => {
+      const itemWrapper = document.createElement('figure');
+      itemWrapper.classList.add('carousel-item');
+      
+      let mediaElement;
+      if (item.type === 'video') {
+        mediaElement = document.createElement('video');
+        mediaElement.autoplay = true;
+        mediaElement.loop = true;
+        mediaElement.muted = true;
+        mediaElement.playsInline = true;
+        
+        const sourceElement = document.createElement('source');
+        sourceElement.src = item.url;
+        sourceElement.type = 'video/mp4';
+        mediaElement.appendChild(sourceElement);
+        mediaElement.appendChild(document.createTextNode('您的瀏覽器不支持 HTML5 視頻。'));
+      } else if (item.type === 'image') {
+        mediaElement = document.createElement('img');
+        mediaElement.src = item.url;
+        mediaElement.alt = item.filename || '圖片';
+        
+        // 對於中間輪播，需要包裝在 carousel-image-container 中
+        if (sectionKey.startsWith('carousel_')) {
+          const imageContainer = document.createElement('div');
+          imageContainer.classList.add('carousel-image-container');
+          imageContainer.appendChild(mediaElement);
+          itemWrapper.appendChild(imageContainer);
+        } else {
+          itemWrapper.appendChild(mediaElement);
+        }
+      } else {
+        mediaElement = document.createElement('div');
+        mediaElement.textContent = `不支援的媒體類型: ${item.type}`;
+        itemWrapper.appendChild(mediaElement);
       }
       
-      targetInnerCarousel.innerHTML = ''; // 再次清空，確保
-
-      sectionContent.forEach(itemData => {
-        const itemWrapper = document.createElement('figure');
-        itemWrapper.classList.add('carousel-item');
-        // figure 元素預設就有一定的 display 屬性，這裡不需要 is-16by9 等
-        // 具體的長寬比和 object-fit 由 CSS 控制
-
-        let mediaElement;
-        if (itemData.type === 'video') {
-          mediaElement = document.createElement('video');
-          // videoElement.style.position = 'absolute'; // 由CSS控制
-          // videoElement.style.top = '0';
-          // videoElement.style.left = '0';
-          // videoElement.style.width = '100%';
-          // videoElement.style.height = '100%'; // << 建議改為 100%
-          // videoElement.style.objectFit = 'cover'; // 由CSS控制
-          mediaElement.autoplay = true;
-          mediaElement.loop = true;
-          mediaElement.muted = true;
-          mediaElement.playsInline = true;
-          // videoElement.controls = false; // << 修改：預設不顯示控制項
-          const sourceElement = document.createElement('source');
-          sourceElement.src = `${SERVER_BASE_URL}${itemData.url}`;
-          sourceElement.type = 'video/mp4'; // 或根據實際影片類型
-          mediaElement.appendChild(sourceElement);
-          mediaElement.appendChild(document.createTextNode('您的瀏覽器不支持 HTML5 視頻。'));
-        } else if (itemData.type === 'image') {
-          mediaElement = document.createElement('img');
-          mediaElement.src = `${SERVER_BASE_URL}${itemData.url}`;
-          mediaElement.alt = itemData.filename || '圖片';
-          // imgElement.style.position = 'absolute'; // 由CSS控制
-          // imgElement.style.top = '0';
-          // imgElement.style.left = '0';
-          // imgElement.style.width = '100%';
-          // imgElement.style.height = '100%';
-          // imgElement.style.objectFit = (sectionKey === 'header_video' || sectionKey === 'footer_content') ? 'cover' : 'contain'; // 由CSS控制
-        } else {
-          mediaElement = document.createElement('div');
-          mediaElement.textContent = `不支援的媒體類型: ${itemData.type}`;
-        }
+      if (item.type !== 'image' || !sectionKey.startsWith('carousel_')) {
         itemWrapper.appendChild(mediaElement);
-        targetInnerCarousel.appendChild(itemWrapper);
-      });
-
-      if (sectionContent.length > 0 && slideInterval > 0) {
-        initializeGenericCarousel(wrapperToInitialize, slideInterval);
-        console.log(`區塊 ${sectionKey} 已啟用輪播，間隔 ${slideInterval / 1000} 秒，項目數: ${sectionContent.length}`);
-      } else if (sectionContent.length === 1) {
-         console.log(`區塊 ${sectionKey} 顯示單一內容。`);
-         // 確保單一影片播放 (已在 initializeGenericCarousel 中處理)
-          const singleVideo = targetInnerCarousel.querySelector('video');
-            if (singleVideo) {
-                singleVideo.play().catch(e => {
-                    if (e.name !== 'AbortError') {
-                        console.warn(`單一影片 ${sectionKey} 自動播放失敗:`, e.name, e.message);
-                    }
-                });
-            }
       }
-
-    } else {
-      console.log(`沒有找到區塊 ${sectionKey} 的媒體資料。`);
-      if (container.querySelector('.carousel-inner')) {
-          container.querySelector('.carousel-inner').innerHTML = ''; // 如果有 inner 也清空
+      
+      targetInnerCarousel.appendChild(itemWrapper);
+    });
+    
+    // 初始化輪播
+    if (contentItems.length > 0 && slideInterval > 0) {
+      initializeGenericCarousel(wrapperToInitialize, slideInterval);
+      console.log(`區塊 ${sectionKey} 已啟用輪播，間隔 ${slideInterval / 1000} 秒，項目數: ${contentItems.length}`);
+    } else if (contentItems.length === 1) {
+      console.log(`區塊 ${sectionKey} 顯示單一內容。`);
+      // 確保單一影片播放
+      const singleVideo = targetInnerCarousel.querySelector('video');
+      if (singleVideo) {
+        singleVideo.play().catch(e => {
+          if (e.name !== 'AbortError') {
+            console.warn(`單一影片 ${sectionKey} 自動播放失敗:`, e.name, e.message);
+          }
+        });
       }
     }
+    
   } catch (error) {
-    console.error(`填充區塊 ${sectionKey} (${containerId}) 內容時發生錯誤: ${error.message}\n${error.stack}`);
-  }
-}
-
-
-// 更新頁首內容
-function updateHeaderContent(mediaItems, headerInterval) {
-  populateSectionContent('header-content-container', 'header_video', mediaItems, headerInterval);
-}
-
-// 更新頁尾內容
-function updateFooterContent(mediaItems, footerInterval) {
-  populateSectionContent('footer-content-container', 'footer_content', mediaItems, footerInterval);
-}
-
-
-// 更新中間輪播區塊
-function updateCarousel(mediaItems, sectionKey, carouselInnerId, carouselInterval) {
-  const carouselInnerElement = document.getElementById(carouselInnerId);
-  if (!carouselInnerElement) {
-    console.warn(`找不到輪播內容元素: ${carouselInnerId}`);
-    return;
-  }
-  const carouselContainer = carouselInnerElement.closest('.carousel-container');
-  if (!carouselContainer) {
-      console.warn(`找不到 ${carouselInnerId} 的父層 .carousel-container`);
-      return;
-  }
-
-  carouselInnerElement.innerHTML = ''; // 清除舊內容
-  if (carouselContainer.slideTimer) { // 清除舊的計時器
-    clearInterval(carouselContainer.slideTimer);
-    carouselContainer.slideTimer = null;
-  }
-
-  const carouselItemsData = mediaItems.filter(item => item.section_key === sectionKey);
-
-  if (carouselItemsData.length > 0) {
-    carouselItemsData.forEach(itemData => {
-      const itemWrapper = document.createElement('figure'); // 使用 figure
-      itemWrapper.classList.add('carousel-item');
-
-      // 中間區塊仍然使��� .carousel-image-container 來包裹 img 以控制比例
-      const imageContainer = document.createElement('div');
-      imageContainer.classList.add('carousel-image-container'); // 保持這個結構
-
-      const imgElement = document.createElement('img');
-      imgElement.src = `${SERVER_BASE_URL}${itemData.url}`;
-      imgElement.alt = itemData.filename || '輪播圖片';
-      // imgElement 的樣式由 .carousel-image-container img 在 CSS 中定義
-
-      imageContainer.appendChild(imgElement);
-      itemWrapper.appendChild(imageContainer);
-      carouselInnerElement.appendChild(itemWrapper);
-    });
-  }
-
-  if (carouselItemsData.length > 0 && carouselInterval > 0) {
-    initializeGenericCarousel(carouselContainer, carouselInterval);
-    console.log(`中間輪播 ${sectionKey} 已啟用，間隔 ${carouselInterval / 1000} 秒，項目數: ${carouselItemsData.length}`);
-  } else if (carouselItemsData.length === 1) {
-     console.log(`中間輪播 ${sectionKey} 顯示單一內容。`);
-  } else {
-    console.log(`中間輪播 ${sectionKey} 無內容。`);
+    console.error(`更新區塊 ${sectionKey} 時發生錯誤:`, error);
   }
 }
 
 // WebSocket 初始化
 function initializeWebSocket() {
-  const socket = io({
-    transports: ['websocket', 'polling']
-  });
-  
-  socket.on('connect', () => console.log('成功連接到 WebSocket 伺服器 (Socket.IO)'));
-  
-  socket.on('disconnect', (reason) => {
-    console.log(`與 WebSocket 伺服器斷開連線: ${reason}`);
-    if (reason === 'io server disconnect') socket.connect();
-  });
-  
-  socket.on('connect_error', (error) => console.error('WebSocket 連線錯誤:', error));
-
-  socket.on('media_updated', (data) => {
-    console.log('收到 "media_updated" 事件:', data.message || data);
-    fetchMediaData().then(updateAllSections);
-  });
-  
-  socket.on('settings_updated', (settings_data) => {
-    console.log('收到 "settings_updated" 事件:', settings_data);
-    fetchMediaData().then(updateAllSections);
-  });
+  try {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    
+    console.log('🔌 正在連接 WebSocket:', wsUrl);
+    
+    const socket = new WebSocket(wsUrl);
+    
+    socket.onopen = () => {
+      console.log('✅ WebSocket 連接成功');
+    };
+    
+    socket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log('📨 收到 WebSocket 訊息:', data);
+        
+        if (data.type === 'playlist_updated' || data.type === 'media_updated') {
+          console.log('🔄 媒體更新，重新載入...');
+          fetchMediaData().then(updateAllSections);
+        } else if (data.content) {
+          // 顯示廣播訊息（如果有廣播訊息元素的話）
+          console.log('📢 收到廣播訊息:', data.content);
+        }
+      } catch (error) {
+        console.error('❌ WebSocket 訊息解析失敗:', error);
+      }
+    };
+    
+    socket.onclose = () => {
+      console.log('❌ WebSocket 連接關閉');
+      // 5秒後重新連接
+      setTimeout(initializeWebSocket, 5000);
+    };
+    
+    socket.onerror = (error) => {
+      console.error('❌ WebSocket 錯誤:', error);
+    };
+    
+  } catch (error) {
+    console.error('WebSocket 初始化失敗:', error);
+  }
 }
 
 document.addEventListener("DOMContentLoaded", () => {

@@ -126,7 +126,7 @@ export function reassignMedia(formData) {
 export function uploadMediaWithProgress(formData, onProgress) {
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        xhr.open('POST', '/api/materials', true);
+        xhr.open('POST', '/api/media', true);
         xhr.setRequestHeader('Authorization', `Bearer ${JWT_TOKEN}`);
 
         xhr.upload.onprogress = onProgress;
